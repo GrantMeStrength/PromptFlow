@@ -12,6 +12,7 @@ interface FlowState {
   selectedNodeId: string | null
   isRunning: boolean
   runOutput: string
+  runOutputIsHtml: boolean
   showOutput: boolean
 
   // Node / Edge mutations
@@ -99,6 +100,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   selectedNodeId: null,
   isRunning: false,
   runOutput: '',
+  runOutputIsHtml: false,
   showOutput: false,
 
   onNodesChange: (changes) =>
@@ -177,12 +179,22 @@ export const useFlowStore = create<FlowState>((set, get) => ({
         if (result instanceof Promise) result = await result
       }
 
-      // Mark all nodes as success
+      // Check for rich HTML output
+      const isHtml = result !== null && typeof result === 'object' && '__html' in (result as object)
       nodes.forEach((n) => updateNodeData(n.id, { hasError: false }))
-      set((s) => ({
-        isRunning: false,
-        runOutput: s.runOutput + `✅ Pipeline completed\n\n${JSON.stringify(result, null, 2)}`,
-      }))
+      if (isHtml) {
+        set({
+          isRunning: false,
+          runOutputIsHtml: true,
+          runOutput: (result as { __html: string }).__html,
+        })
+      } else {
+        set((s) => ({
+          isRunning: false,
+          runOutputIsHtml: false,
+          runOutput: s.runOutput + `✅ Pipeline completed\n\n${JSON.stringify(result, null, 2)}`,
+        }))
+      }
     } catch (err) {
       set((s) => ({
         isRunning: false,
@@ -191,7 +203,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     }
   },
 
-  clearOutput: () => set({ runOutput: '' }),
+  clearOutput: () => set({ runOutput: '', runOutputIsHtml: false }),
   toggleOutput: () => set((s) => ({ showOutput: !s.showOutput })),
 
   getGeneratedCode: () => {

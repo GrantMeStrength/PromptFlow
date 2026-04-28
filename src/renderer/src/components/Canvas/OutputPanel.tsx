@@ -7,11 +7,11 @@ interface OutputPanelProps {
 }
 
 export function OutputPanel({ onClose }: OutputPanelProps) {
-  const { runOutput, clearOutput, isRunning } = useFlowStore()
+  const { runOutput, runOutputIsHtml, clearOutput, isRunning } = useFlowStore()
 
   return (
-    <div className="h-48 bg-[#080810] border-t border-[#2a2a3f] flex flex-col font-mono">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[#2a2a3f]">
+    <div className="h-64 bg-[#080810] border-t border-[#2a2a3f] flex flex-col font-mono">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-[#2a2a3f] shrink-0">
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${isRunning ? 'bg-green-400 animate-pulse' : 'bg-slate-600'}`} />
           <span className="text-[11px] uppercase tracking-widest text-slate-500">Pipeline Output</span>
@@ -28,11 +28,20 @@ export function OutputPanel({ onClose }: OutputPanelProps) {
           </button>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-3">
-        {runOutput ? (
-          <pre className="text-xs text-green-300 whitespace-pre-wrap leading-relaxed">{runOutput}</pre>
+      <div className="flex-1 overflow-auto">
+        {!runOutput ? (
+          <div className="p-3">
+            <span className="text-xs text-slate-600">Press Run to execute the pipeline…</span>
+          </div>
+        ) : runOutputIsHtml ? (
+          <div
+            className="p-3 text-sm"
+            dangerouslySetInnerHTML={{ __html: runOutput }}
+          />
         ) : (
-          <span className="text-xs text-slate-600">Press Run to execute the pipeline…</span>
+          <div className="p-3">
+            <pre className="text-xs text-green-300 whitespace-pre-wrap leading-relaxed">{runOutput}</pre>
+          </div>
         )}
       </div>
     </div>

@@ -224,6 +224,238 @@ result = (inputs.items || []).filter(item => String(item).toLowerCase().includes
     },
   },
 
+  // ── HTTP ──────────────────────────────────────────────────────────────────
+  {
+    kind: 'function',
+    label: 'HTTP GET',
+    description: 'Fetches a URL and returns the response body as text or parsed JSON.',
+    category: 'HTTP',
+    color: 'text-cyan-400',
+    data: {
+      inputs: [{ name: 'url', type: 'string', description: 'URL to fetch' }],
+      outputs: [{ name: 'result', type: 'any', description: 'Response body' }],
+      code: `const res = await fetch(inputs.url)
+if (!res.ok) throw new Error(\`HTTP \${res.status}: \${res.statusText}\`)
+const text = await res.text()
+try { result = JSON.parse(text) } catch { result = text }`,
+    },
+  },
+  {
+    kind: 'function',
+    label: 'HTTP POST',
+    description: 'Posts JSON data to a URL and returns the response.',
+    category: 'HTTP',
+    color: 'text-cyan-400',
+    data: {
+      inputs: [{ name: 'url', type: 'string' }, { name: 'body', type: 'object', description: 'JSON body to send' }],
+      outputs: [{ name: 'result', type: 'any' }],
+      code: `const res = await fetch(inputs.url, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(inputs.body)
+})
+if (!res.ok) throw new Error(\`HTTP \${res.status}: \${res.statusText}\`)
+const text = await res.text()
+try { result = JSON.parse(text) } catch { result = text }`,
+    },
+  },
+
+  // ── Utility ───────────────────────────────────────────────────────────────
+  {
+    kind: 'function',
+    label: 'Template Fill',
+    description: 'Fills {{variable}} placeholders in a template string from an inputs object.',
+    category: 'Utility',
+    color: 'text-slate-400',
+    data: {
+      inputs: [{ name: 'template', type: 'string', description: 'String with {{placeholder}} markers' }, { name: 'vars', type: 'object', description: 'Values to substitute' }],
+      outputs: [{ name: 'result', type: 'string' }],
+      code: `result = inputs.template.replace(/\\{\\{(\\w+)\\}\\}/g, (_, key) => inputs.vars?.[key] ?? '')`,
+    },
+  },
+  {
+    kind: 'function',
+    label: 'Log',
+    description: 'Passes value through unchanged and logs it — useful for debugging pipelines.',
+    category: 'Utility',
+    color: 'text-slate-400',
+    data: {
+      inputs: [{ name: 'value', type: 'any' }],
+      outputs: [{ name: 'result', type: 'any' }],
+      code: `console.log('[Log node]', JSON.stringify(inputs.value, null, 2))
+result = inputs.value`,
+    },
+  },
+  {
+    kind: 'function',
+    label: 'Merge Objects',
+    description: 'Deep-merges two objects into one, with the second taking priority.',
+    category: 'Utility',
+    color: 'text-slate-400',
+    data: {
+      inputs: [{ name: 'base', type: 'object' }, { name: 'override', type: 'object' }],
+      outputs: [{ name: 'result', type: 'object' }],
+      code: `function deepMerge(a, b) {
+  const out = { ...a }
+  for (const k of Object.keys(b)) {
+    out[k] = (b[k] && typeof b[k] === 'object' && !Array.isArray(b[k]) && a[k])
+      ? deepMerge(a[k], b[k]) : b[k]
+  }
+  return out
+}
+result = deepMerge(inputs.base || {}, inputs.override || {})`,
+    },
+  },
+
+  // ── LLM (continued) ───────────────────────────────────────────────────────
+  {
+    kind: 'llm',
+    label: 'Rewrite Tone',
+    description: 'Rewrites text in a specified tone: formal, casual, friendly, or technical.',
+    category: 'LLM',
+    color: 'text-purple-400',
+    data: {
+      inputs: [{ name: 'text', type: 'string' }, { name: 'tone', type: 'string', description: 'e.g. formal, casual, friendly, technical' }],
+      outputs: [{ name: 'result', type: 'string' }],
+      code: `const tone = inputs.tone || 'formal'
+result = await callLLM('', \`Rewrite the following text in a \${tone} tone. Return only the rewritten text.\\n\\n\${inputs.text}\`)`,
+    },
+  },
+  {
+    kind: 'llm',
+    label: 'Classify',
+    description: 'Assigns text to one of a set of user-defined categories.',
+    category: 'LLM',
+    color: 'text-purple-400',
+    data: {
+      inputs: [{ name: 'text', type: 'string' }, { name: 'categories', type: 'string', description: 'Comma-separated list, e.g. "sports, politics, tech"' }],
+      outputs: [{ name: 'result', type: 'string' }],
+      code: `const cats = inputs.categories || 'positive, negative, neutral'
+result = (await callLLM('', \`Classify the following text into exactly one of these categories: \${cats}.\\nReturn only the category name.\\n\\nText: \${inputs.text}\`)).trim()`,
+    },
+  },
+
+  // ── Output (rich render) ──────────────────────────────────────────────────
+  {
+    kind: 'output',
+    label: 'Bar Chart',
+    description: 'Renders a bar chart from { labels: string[], values: number[] } or an array of { label, value } objects.',
+    category: 'Output',
+    color: 'text-rose-400',
+    data: {
+      inputs: [{ name: 'value', type: 'any', description: '{ labels, values } or [{ label, value }]' }],
+      outputs: [{ name: 'result', type: 'any' }],
+      code: `let labels, values
+if (Array.isArray(inputs.value)) {
+  labels = inputs.value.map(d => String(d.label ?? d.name ?? d.key ?? ''))
+  values = inputs.value.map(d => Number(d.value ?? d.count ?? d.n ?? 0))
+} else {
+  labels = inputs.value.labels || []
+  values = inputs.value.values || []
+}
+const max = Math.max(...values, 1)
+const W = 480, barW = Math.max(20, Math.floor((W - 40) / labels.length) - 6)
+const H = 200
+const bars = labels.map((lbl, i) => {
+  const bh = Math.round((values[i] / max) * H)
+  const x = 20 + i * (barW + 6)
+  const y = H - bh + 30
+  const colors = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6']
+  const c = colors[i % colors.length]
+  return \`<rect x="\${x}" y="\${y}" width="\${barW}" height="\${bh}" rx="3" fill="\${c}" opacity="0.9"/>
+    <text x="\${x + barW/2}" y="\${y - 5}" text-anchor="middle" fill="#e2e8f0" font-size="11">\${values[i]}</text>
+    <text x="\${x + barW/2}" y="\${H + 48}" text-anchor="middle" fill="#94a3b8" font-size="11">\${lbl}</text>\`
+}).join('')
+result = { __html: \`<div style="background:#0f0f1a;padding:16px;border-radius:8px">
+  <svg width="\${W}" height="\${H + 60}" xmlns="http://www.w3.org/2000/svg">
+    <line x1="20" y1="30" x2="20" y2="\${H + 30}" stroke="#2a2a3f" stroke-width="1"/>
+    <line x1="20" y1="\${H + 30}" x2="\${W - 20}" y2="\${H + 30}" stroke="#2a2a3f" stroke-width="1"/>
+    \${bars}
+  </svg>
+</div>\` }`,
+    },
+  },
+  {
+    kind: 'output',
+    label: 'Table Output',
+    description: 'Renders an array of objects as an HTML table, or parses a CSV string.',
+    category: 'Output',
+    color: 'text-rose-400',
+    data: {
+      inputs: [{ name: 'value', type: 'any', description: 'Array of objects or CSV string' }],
+      outputs: [{ name: 'result', type: 'any' }],
+      code: `let rows = inputs.value
+if (typeof rows === 'string') {
+  const lines = rows.trim().split('\\n')
+  const headers = lines[0].split(',').map(h => h.trim())
+  rows = lines.slice(1).map(line => {
+    const vals = line.split(',')
+    return Object.fromEntries(headers.map((h, i) => [h, (vals[i] || '').trim()]))
+  })
+}
+if (!Array.isArray(rows) || rows.length === 0) { result = { __html: '<p style="color:#94a3b8">No data</p>' }; return }
+const cols = Object.keys(rows[0])
+const th = cols.map(c => \`<th style="padding:6px 12px;text-align:left;border-bottom:1px solid #2a2a3f;color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.05em">\${c}</th>\`).join('')
+const trs = rows.map((r, i) => {
+  const bg = i % 2 === 0 ? '#0f0f1a' : '#13131f'
+  const tds = cols.map(c => \`<td style="padding:6px 12px;border-bottom:1px solid #1e1e2e;color:#e2e8f0;font-size:12px">\${r[c] ?? ''}</td>\`).join('')
+  return \`<tr style="background:\${bg}">\${tds}</tr>\`
+}).join('')
+result = { __html: \`<div style="overflow:auto;border-radius:8px;border:1px solid #2a2a3f">
+  <table style="border-collapse:collapse;width:100%;font-family:monospace">
+    <thead><tr>\${th}</tr></thead>
+    <tbody>\${trs}</tbody>
+  </table>
+</div>\` }`,
+    },
+  },
+  {
+    kind: 'output',
+    label: 'JSON Viewer',
+    description: 'Renders any JSON value with syntax highlighting.',
+    category: 'Output',
+    color: 'text-rose-400',
+    data: {
+      inputs: [{ name: 'value', type: 'any' }],
+      outputs: [{ name: 'result', type: 'any' }],
+      code: `function highlight(json) {
+  return json
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/("(\\\\u[a-zA-Z0-9]{4}|\\\\[^u]|[^\\\\"])*"(\\s*:)?|\\b(true|false|null)\\b|-?\\d+(?:\\.\\d*)?(?:[eE][+\\-]?\\d+)?)/g, m => {
+      let c = '#6366f1'
+      if (/^"/.test(m)) c = /:$/.test(m) ? '#8b5cf6' : '#10b981'
+      else if (/true|false/.test(m)) c = '#f59e0b'
+      else if (/null/.test(m)) c = '#94a3b8'
+      return \`<span style="color:\${c}">\${m}</span>\`
+    })
+}
+const formatted = JSON.stringify(inputs.value, null, 2)
+result = { __html: \`<div style="background:#0a0a14;border-radius:8px;padding:16px;overflow:auto">
+  <pre style="margin:0;font-size:12px;line-height:1.6;color:#e2e8f0;font-family:monospace">\${highlight(formatted)}</pre>
+</div>\` }`,
+    },
+  },
+  {
+    kind: 'output',
+    label: 'Card Output',
+    description: 'Displays a styled card with a title and body text — great for summaries.',
+    category: 'Output',
+    color: 'text-rose-400',
+    data: {
+      inputs: [{ name: 'title', type: 'string' }, { name: 'body', type: 'string' }],
+      outputs: [{ name: 'result', type: 'any' }],
+      code: `const title = inputs.title || 'Result'
+const body = inputs.body || String(inputs.value ?? '')
+const paragraphs = body.split('\\n\\n').filter(Boolean)
+  .map(p => \`<p style="margin:0 0 12px;color:#cbd5e1;font-size:13px;line-height:1.7">\${p}</p>\`).join('')
+result = { __html: \`<div style="background:linear-gradient(135deg,#13131f,#1a1a2e);border:1px solid #2a2a3f;border-radius:12px;padding:20px 24px;max-width:600px">
+  <div style="font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:#6366f1;margin-bottom:8px;font-weight:600">Result</div>
+  <h2 style="margin:0 0 16px;font-size:18px;font-weight:700;color:#f1f5f9">\${title}</h2>
+  <div>\${paragraphs}</div>
+</div>\` }`,
+    },
+  },
+
   // ── Decision ──────────────────────────────────────────────────────────────
   {
     kind: 'decision',
