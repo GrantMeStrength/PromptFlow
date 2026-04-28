@@ -1,8 +1,30 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Editor from '@monaco-editor/react'
-import { X, Trash2, ChevronDown, ChevronUp, Zap } from 'lucide-react'
+import { X, Trash2, ChevronDown, ChevronUp, Zap, RotateCcw, Loader2 } from 'lucide-react'
 import { useFlowStore } from '../../store/flowStore'
 import type { NodeKind, PortDef } from '../../types'
+
+const REGEN_SYSTEM_PROMPT = `You are updating a single node in PromptFlow, a node-graph IDE.
+The user has described what they want the node to do. Update the node accordingly.
+
+Respond with ONLY a valid JSON object — no markdown, no explanation:
+{
+  "description": "string (one sentence describing what the node does)",
+  "code": "string (complete, self-contained JS — see rules below)"
+}
+
+CODE RULES (critical — violations will cause runtime errors):
+- Code runs inside an async function body in a Node.js VM sandbox.
+- Available globals: Math, JSON, Array, Object, String, Number, Boolean, Set, Map, Date, Promise, RegExp, parseInt, parseFloat, isNaN, isFinite, console, callLLM.
+- NO other globals, libraries, or helper functions exist. Do NOT call functions you have not defined in the code itself.
+- Do NOT use: fetch, require, import, Buffer, process, setTimeout, or any DOM APIs.
+- Do NOT call invented helpers like generateBarChart(), renderTable(), etc. Write the full implementation inline.
+- Inputs come from the "inputs" object (e.g. inputs.text, inputs.value).
+- Set the output by returning a value (e.g. return { result: 42 }) or assigning result = { ... }.
+- Use explicit for-loops instead of spread in function calls (avoid Math.max(...arr); use a loop).
+- For visualisations, return { __html: '<svg>...</svg>' } and the output panel will render it.
+- LLM nodes use: const response = await callLLM('gpt-4o-mini', prompt); return { response }
+- Code must be complete and runnable as-is — no placeholders, no TODO comments.`
 
 const kindColors: Record<NodeKind, string> = {
   input: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
@@ -37,8 +59,17 @@ function PortList({ ports, label }: { ports: PortDef[]; label: string }) {
 export function NodeInspector() {
   const { nodes, selectedNodeId, selectNode, updateNodeData, deleteNode } = useFlowStore()
   const [codeExpanded, setCodeExpanded] = useState(true)
+  const [refinePrompt, setRefinePrompt] = useState('')
+  const [refining, setRefining] = useState(false)
+  const [refineError, setRefineError] = useState('')
 
   const node = nodes.find((n) => n.id === selectedNodeId)
+
+  // Sync prompt field when selected node changes
+  useEffect(() => {
+    setRefinePrompt(node?.data.prompt ?? '')
+    setRefineError('')
+  }, [selectedNodeId])
 
   if (!node) {
     return (
@@ -54,6 +85,28 @@ export function NodeInspector() {
 
   const { data } = node
   const kindColor = kindColors[data.kind]
+
+  const handleRegenerate = async () => {
+    const prompt = refinePrompt.trim()
+    if (!prompt) return
+    setRefining(true)
+    setRefineError('')
+    try {
+      const context = `Current node: "${data.label}" (${data.kind}). Current description: "${data.description ?? ''}".`
+      const userMsg = `${context}\n\nUser request: ${prompt}`
+      const res = await window.electronAPI?.callLLM(userMsg, REGEN_SYSTEM_PROMPT)
+      if (!res?.success || !res.result) throw new Error(res?.error ?? 'LLM call failed')
+      const parsed = JSON.parse(res.result)
+      updateNodeData(node.id, {
+        prompt,
+        ...(parsed.description ? { description: parsed.description } : {}),
+        ...(parsed.code ? { code: parsed.code } : {}),
+      })
+    } catch (err) {
+      setRefineError((err as Error).message)
+    }
+    setRefining(false)
+  }
 
   return (
     <aside className="w-80 bg-[#13131f] border-l border-[#2a2a3f] flex flex-col overflow-hidden">
@@ -150,18 +203,37 @@ export function NodeInspector() {
           )}
         </div>
 
-        {/* Origin prompt */}
-        {data.prompt && (
-          <div>
-            <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-slate-500 mb-1.5">
-              <Zap size={11} />
-              Origin Prompt
-            </div>
-            <div className="bg-[#0f0f1a] border border-[#2a2a3f] rounded-lg p-2.5 text-xs text-slate-400 italic leading-relaxed">
-              "{data.prompt}"
-            </div>
+        {/* Prompt / Regenerate */}
+        <div>
+          <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-slate-500 mb-1.5">
+            <Zap size={11} />
+            Prompt
           </div>
-        )}
+          <textarea
+            className="w-full bg-[#0f0f1a] text-slate-300 text-xs rounded-lg p-2.5 border border-[#2a2a3f] focus:border-indigo-500 outline-none resize-none leading-relaxed font-mono"
+            rows={3}
+            placeholder="Describe what this node should do…"
+            value={refinePrompt}
+            onChange={(e) => setRefinePrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleRegenerate()
+            }}
+          />
+          <button
+            onClick={handleRegenerate}
+            disabled={refining || !refinePrompt.trim()}
+            className="mt-1.5 flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors w-full justify-center"
+          >
+            {refining ? (
+              <><Loader2 size={12} className="animate-spin" /> Regenerating…</>
+            ) : (
+              <><RotateCcw size={12} /> Regenerate node</>
+            )}
+          </button>
+          {refineError && (
+            <p className="mt-1.5 text-[11px] text-red-400">{refineError}</p>
+          )}
+        </div>
       </div>
 
       {/* Footer */}
