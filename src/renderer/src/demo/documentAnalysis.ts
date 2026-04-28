@@ -101,15 +101,14 @@ return {
         llmModel: 'gpt-4o',
         llmPromptTemplate:
           'Summarize the following document in 2-3 sentences. Key topics: {{keywords}}.\n\nDocument:\n{{text}}',
-        code: `// LLM Node – calls language model API
-// In production: const res = await fetch('https://api.openai.com/v1/chat/completions', ...)
-// Prototype mock:
-const kw = Array.isArray(inputs.keywords) ? inputs.keywords.join(', ') : ''
-const preview = inputs.text?.slice(0, 80) || ''
-return {
-  summary: \`[AI Summary] This document discusses \${kw || 'various topics'}. ` +
-          `The text "\${preview}..." has been analysed and condensed into key insights.\`
-}`,
+        code: `// LLM Node – calls language model via callLLM (injected by runtime)
+const kw = Array.isArray(inputs.keywords) ? inputs.keywords.join(', ') : String(inputs.keywords ?? '')
+const text = String(inputs.text ?? '')
+const prompt = llmPromptTemplate
+  .replace('{{keywords}}', kw)
+  .replace('{{text}}', text)
+const summary = await callLLM(llmModel || 'gpt-4o-mini', prompt)
+return { summary }`,
         prompt: 'Create an LLM node that summarises a document given its text and extracted keywords',
       },
     },

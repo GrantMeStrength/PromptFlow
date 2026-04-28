@@ -4,6 +4,53 @@ import fs from 'fs'
 import vm from 'vm'
 import { pathToFileURL } from 'url'
 
+// ─── Settings ────────────────────────────────────────────────────────────────
+
+interface LLMSettings {
+  apiKey: string
+  baseURL: string
+  defaultModel: string
+}
+
+function settingsPath(): string {
+  return path.join(app.getPath('userData'), 'promptflow-settings.json')
+}
+
+function loadSettings(): LLMSettings {
+  try {
+    const raw = fs.readFileSync(settingsPath(), 'utf8')
+    return { apiKey: '', baseURL: 'https://api.openai.com/v1', defaultModel: 'gpt-4o-mini', ...JSON.parse(raw) }
+  } catch {
+    return { apiKey: '', baseURL: 'https://api.openai.com/v1', defaultModel: 'gpt-4o-mini' }
+  }
+}
+
+function saveSettings(settings: LLMSettings): void {
+  fs.mkdirSync(path.dirname(settingsPath()), { recursive: true })
+  fs.writeFileSync(settingsPath(), JSON.stringify(settings, null, 2), 'utf8')
+}
+
+async function callLLM(model: string, prompt: string, systemPrompt?: string): Promise<string> {
+  const settings = loadSettings()
+  if (!settings.apiKey) throw new Error('No API key configured — open Settings (⌘,) to add one.')
+  const baseURL = settings.baseURL || 'https://api.openai.com/v1'
+  const messages = [
+    ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+    { role: 'user', content: prompt },
+  ]
+  const response = await fetch(`${baseURL}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.apiKey}` },
+    body: JSON.stringify({ model, messages, max_tokens: 2000 }),
+  })
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`LLM API error ${response.status}: ${text}`)
+  }
+  const data = await response.json() as { choices: { message: { content: string } }[] }
+  return data.choices[0]?.message?.content ?? ''
+}
+
 const isDev = process.env.NODE_ENV !== 'production'
 
 let mainWindow: BrowserWindow | null = null
@@ -119,9 +166,16 @@ ipcMain.handle('load-project', async () => {
   }
 })
 
+ipcMain.handle('get-settings', () => loadSettings())
+
+ipcMain.handle('save-settings', (_event, settings: LLMSettings) => {
+  saveSettings(settings)
+  return { success: true }
+})
+
 ipcMain.handle('run-code', async (_event, code: string, input: unknown) => {
   try {
-    const sandbox = {
+    const sandbox: Record<string, unknown> = {
       inputs: input,
       console,
       Date,
@@ -135,13 +189,15 @@ ipcMain.handle('run-code', async (_event, code: string, input: unknown) => {
       Set,
       Map,
       Promise,
-      result: undefined as unknown,
+      // Inject callLLM so generated LLM node code can call the real API
+      callLLM: (model: string, prompt: string, systemPrompt?: string) =>
+        callLLM(model, prompt, systemPrompt),
+      result: undefined,
     }
-    const script = new vm.Script(`(async () => { ${code} })().then(r => { result = r })`)
     const context = vm.createContext(sandbox)
-    await script.runInContext(context)
-    // Give async script time to settle
-    await new Promise((r) => setTimeout(r, 100))
+    const script = new vm.Script(`(async () => { ${code} })()`)
+    const promise = script.runInContext(context) as Promise<unknown>
+    sandbox.result = await promise
     return { success: true, result: sandbox.result }
   } catch (err) {
     return { success: false, error: (err as Error).message }

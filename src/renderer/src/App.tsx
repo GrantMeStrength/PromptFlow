@@ -6,11 +6,13 @@ import { NodeInspector } from './components/Inspector/NodeInspector'
 import { PromptBar } from './components/PromptBar/PromptBar'
 import { OutputPanel } from './components/Canvas/OutputPanel'
 import { CodeViewer } from './components/Canvas/CodeViewer'
+import { SettingsModal } from './components/Settings/SettingsModal'
 import { useFlowStore } from './store/flowStore'
 
 export default function App() {
   const { showOutput, toggleOutput } = useFlowStore()
   const [showCode, setShowCode] = React.useState(false)
+  const [showSettings, setShowSettings] = React.useState(false)
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#0f0f1a] text-white overflow-hidden">
@@ -19,6 +21,7 @@ export default function App() {
         onToggleOutput={toggleOutput}
         showCode={showCode}
         onToggleCode={() => setShowCode((v) => !v)}
+        onOpenSettings={() => setShowSettings(true)}
       />
 
       {/* Main workspace */}
@@ -36,6 +39,8 @@ export default function App() {
       </div>
 
       <PromptBar />
+
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
     </div>
   )
 }

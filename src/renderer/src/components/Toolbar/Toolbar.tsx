@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import {
   Play, Square, FilePlus, FolderOpen, Save, Code2,
-  Loader2, ChevronDown, ChevronUp,
+  Loader2, ChevronDown, ChevronUp, Settings,
 } from 'lucide-react'
 import { useFlowStore } from '../../store/flowStore'
 
@@ -10,9 +10,10 @@ interface ToolbarProps {
   onToggleOutput: () => void
   showCode: boolean
   onToggleCode: () => void
+  onOpenSettings: () => void
 }
 
-export function Toolbar({ showOutput, onToggleOutput, showCode, onToggleCode }: ToolbarProps) {
+export function Toolbar({ showOutput, onToggleOutput, showCode, onToggleCode, onOpenSettings }: ToolbarProps) {
   const { project, isRunning, runPipeline, newProject, loadProject, getProject, getGeneratedCode } =
     useFlowStore()
   const [saving, setSaving] = useState(false)
@@ -118,6 +119,16 @@ export function Toolbar({ showOutput, onToggleOutput, showCode, onToggleCode }: 
       >
         <Square size={12} className={showOutput ? 'fill-current' : ''} />
         <span>Output</span>
+      </button>
+
+      {/* Settings */}
+      <button
+        onClick={onOpenSettings}
+        className="toolbar-btn"
+        title="Settings (API key, model)"
+      >
+        <Settings size={15} />
+        <span>Settings</span>
       </button>
 
       <div className="w-px h-5 bg-[#2a2a3f] mx-1" />

@@ -70,6 +70,13 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
     const fnName = nodeToFnName(node.id, node.data.label)
     lines.push(`// ── Node: ${node.data.label} (${node.data.kind}) ──`)
     lines.push(`async function ${fnName}(inputs) {`)
+    // For LLM nodes inject model + prompt template as local constants
+    if (node.data.kind === 'llm') {
+      const model = (node.data.llmModel || 'gpt-4o-mini').replace(/`/g, '\\`')
+      const tmpl = (node.data.llmPromptTemplate || '{{text}}').replace(/`/g, '\\`')
+      lines.push(`  const llmModel = \`${model}\``)
+      lines.push(`  const llmPromptTemplate = \`${tmpl}\``)
+    }
     // Indent the node's code
     const nodeCode = node.data.code || 'return inputs'
     for (const codeLine of nodeCode.split('\n')) {

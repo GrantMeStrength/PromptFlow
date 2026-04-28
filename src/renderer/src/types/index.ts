@@ -52,12 +52,22 @@ export interface FlowProject {
   edges: FlowEdge[]
 }
 
+// ─── LLM Settings ─────────────────────────────────────────────────────────────
+
+export interface LLMSettings {
+  apiKey: string
+  baseURL: string
+  defaultModel: string
+}
+
 // ─── IPC API (exposed via preload) ───────────────────────────────────────────
 
 export interface ElectronAPI {
   saveProject: (project: FlowProject) => Promise<{ success: boolean; path?: string; error?: string }>
   loadProject: () => Promise<{ success: boolean; project?: FlowProject; error?: string }>
   runCode: (code: string, input: unknown) => Promise<{ success: boolean; result?: unknown; error?: string }>
+  getSettings: () => Promise<LLMSettings>
+  saveSettings: (settings: LLMSettings) => Promise<{ success: boolean }>
   onMenuAction: (callback: (action: string) => void) => () => void
 }
 

@@ -60,7 +60,7 @@ const defaultNodeData = (kind: NodeKind): NodeData => {
       outputs: [{ name: 'response', type: 'string' }],
       llmModel: 'gpt-4o',
       llmPromptTemplate: 'Summarize the following text:\\n\\n{{text}}',
-      code: `// LLM node – in production calls the model API\n// For prototype, returns a mock response\nreturn { response: \`[LLM Response to: \${inputs.text?.slice(0,60)}...]\` }`,
+      code: `// Calls the configured LLM (callLLM is injected by the runtime)\nconst text = String(inputs.text ?? inputs.content ?? inputs.value ?? '')\nconst prompt = llmPromptTemplate ? llmPromptTemplate.replace('{{text}}', text) : text\nconst response = await callLLM(llmModel || 'gpt-4o-mini', prompt)\nreturn { response }`,
     },
     decision: {
       label: 'Decision',
