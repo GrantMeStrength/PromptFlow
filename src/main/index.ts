@@ -221,6 +221,14 @@ ipcMain.handle('run-code', async (_event, code: string, input: unknown) => {
       Set,
       Map,
       Promise,
+      RegExp,
+      Error,
+      parseInt,
+      parseFloat,
+      isNaN,
+      isFinite,
+      encodeURIComponent,
+      decodeURIComponent,
       // Inject callLLM so generated LLM node code can call the real API
       callLLM: (model: string, prompt: string, systemPrompt?: string) =>
         callLLM(model, prompt, systemPrompt),

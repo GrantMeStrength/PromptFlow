@@ -345,34 +345,36 @@ result = (await callLLM('', \`Classify the following text into exactly one of th
     data: {
       inputs: [{ name: 'value', type: 'any', description: '{ labels, values } or [{ label, value }]' }],
       outputs: [{ name: 'result', type: 'any' }],
-      code: `let labels, values
-if (Array.isArray(inputs.value)) {
-  labels = inputs.value.map(d => String(d.label ?? d.name ?? d.key ?? ''))
-  values = inputs.value.map(d => Number(d.value ?? d.count ?? d.n ?? 0))
+      code: `const raw = inputs.value
+let labels, values
+if (!raw) {
+  labels = ['Alpha','Beta','Gamma','Delta']
+  values = [42, 78, 35, 61]
+} else if (Array.isArray(raw)) {
+  labels = raw.map(function(d) { return String(d.label != null ? d.label : d.name != null ? d.name : d.key != null ? d.key : '') })
+  values = raw.map(function(d) { return Number(d.value != null ? d.value : d.count != null ? d.count : d.n != null ? d.n : 0) })
 } else {
-  labels = inputs.value.labels || []
-  values = inputs.value.values || []
+  labels = Array.isArray(raw.labels) ? raw.labels : []
+  values = Array.isArray(raw.values) ? raw.values.map(Number) : []
 }
-const max = Math.max(...values, 1)
-const W = 480, barW = Math.max(20, Math.floor((W - 40) / labels.length) - 6)
-const H = 200
-const bars = labels.map((lbl, i) => {
-  const bh = Math.round((values[i] / max) * H)
-  const x = 20 + i * (barW + 6)
+if (labels.length === 0) { labels = ['No data']; values = [0] }
+const allVals = values.concat([1])
+let max = allVals[0]
+for (let i = 1; i < allVals.length; i++) { if (allVals[i] > max) max = allVals[i] }
+const W = 460, H = 180
+const barW = Math.max(16, Math.floor((W - 40) / labels.length) - 8)
+const colors = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6']
+let bars = ''
+for (let i = 0; i < labels.length; i++) {
+  const bh = Math.max(2, Math.round((values[i] / max) * H))
+  const x = 20 + i * (barW + 8)
   const y = H - bh + 30
-  const colors = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6']
   const c = colors[i % colors.length]
-  return \`<rect x="\${x}" y="\${y}" width="\${barW}" height="\${bh}" rx="3" fill="\${c}" opacity="0.9"/>
-    <text x="\${x + barW/2}" y="\${y - 5}" text-anchor="middle" fill="#e2e8f0" font-size="11">\${values[i]}</text>
-    <text x="\${x + barW/2}" y="\${H + 48}" text-anchor="middle" fill="#94a3b8" font-size="11">\${lbl}</text>\`
-}).join('')
-result = { __html: \`<div style="background:#0f0f1a;padding:16px;border-radius:8px">
-  <svg width="\${W}" height="\${H + 60}" xmlns="http://www.w3.org/2000/svg">
-    <line x1="20" y1="30" x2="20" y2="\${H + 30}" stroke="#2a2a3f" stroke-width="1"/>
-    <line x1="20" y1="\${H + 30}" x2="\${W - 20}" y2="\${H + 30}" stroke="#2a2a3f" stroke-width="1"/>
-    \${bars}
-  </svg>
-</div>\` }`,
+  bars += '<rect x="' + x + '" y="' + y + '" width="' + barW + '" height="' + bh + '" rx="3" fill="' + c + '" opacity="0.9"/>'
+  bars += '<text x="' + (x + barW/2) + '" y="' + (y - 5) + '" text-anchor="middle" fill="#e2e8f0" font-size="11">' + values[i] + '</text>'
+  bars += '<text x="' + (x + barW/2) + '" y="' + (H + 48) + '" text-anchor="middle" fill="#94a3b8" font-size="11">' + labels[i] + '</text>'
+}
+result = { __html: '<div style="background:#0f0f1a;padding:16px;border-radius:8px"><svg width="' + W + '" height="' + (H+60) + '" xmlns="http://www.w3.org/2000/svg"><line x1="20" y1="30" x2="20" y2="' + (H+30) + '" stroke="#2a2a3f" stroke-width="1"/><line x1="20" y1="' + (H+30) + '" x2="' + (W-20) + '" y2="' + (H+30) + '" stroke="#2a2a3f" stroke-width="1"/>' + bars + '</svg></div>' }`,
     },
   },
   {
