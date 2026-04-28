@@ -31,23 +31,31 @@ function saveSettings(settings: LLMSettings): void {
 
 async function callLLM(model: string, prompt: string, systemPrompt?: string): Promise<string> {
   const settings = loadSettings()
-  if (!settings.apiKey) throw new Error('No API key configured — open Settings (⌘,) to add one.')
-  const baseURL = settings.baseURL || 'https://api.openai.com/v1'
+  if (!settings.apiKey) throw new Error('No API key configured — open Settings (⚙) to add one.')
+  const baseURL = (settings.baseURL || 'https://api.openai.com/v1').replace(/\/$/, '')
+  // Use settings default model as fallback
+  const resolvedModel = model || settings.defaultModel || 'gpt-4o-mini'
   const messages = [
     ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
     { role: 'user', content: prompt },
   ]
+  console.log(`[llm] calling ${baseURL} model=${resolvedModel} prompt-length=${prompt.length}`)
   const response = await fetch(`${baseURL}/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.apiKey}` },
-    body: JSON.stringify({ model, messages, max_tokens: 2000 }),
+    body: JSON.stringify({ model: resolvedModel, messages, max_tokens: 2000 }),
   })
   if (!response.ok) {
     const text = await response.text()
-    throw new Error(`LLM API error ${response.status}: ${text}`)
+    let hint = ''
+    if (response.status === 401) hint = ' (Check your API key in Settings — it may need the "Models" permission.)'
+    if (response.status === 429) hint = ' (Rate limit hit — try again in a moment.)'
+    throw new Error(`LLM API error ${response.status}${hint}\n${text}`)
   }
   const data = await response.json() as { choices: { message: { content: string } }[] }
-  return data.choices[0]?.message?.content ?? ''
+  const content = data.choices[0]?.message?.content ?? ''
+  console.log(`[llm] response length=${content.length}`)
+  return content
 }
 
 const isDev = process.env.NODE_ENV !== 'production'
