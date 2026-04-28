@@ -1,0 +1,41 @@
+{
+  "name": "promptflow",
+  "version": "0.1.0",
+  "description": "PromptFlow – a prompt-driven visual IDE",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "concurrently -k \"npm run dev:vite\" \"npm run dev:electron\"",
+    "dev:vite": "vite --config vite.renderer.config.ts",
+    "dev:electron": "wait-on http://localhost:5173 && tsc -p tsconfig.main.json && ./node_modules/.bin/electron dist/main/index.js",
+    "build": "npm run build:renderer && npm run build:main",
+    "build:renderer": "vite build --config vite.renderer.config.ts",
+    "build:main": "tsc -p tsconfig.main.json",
+    "start": "npm run build && NODE_ENV=production ./node_modules/.bin/electron ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "autoprefixer": "^10.5.0",
+    "concurrently": "^9.2.1",
+    "electron": "^41.3.0",
+    "electron-builder": "^26.8.1",
+    "postcss": "^8.5.12",
+    "tailwindcss": "^4.2.4",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.10",
+    "wait-on": "^9.0.5"
+  },
+  "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "@tailwindcss/vite": "^4.2.4",
+    "lucide-react": "^1.11.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "reactflow": "^11.11.4",
+    "zustand": "^5.0.12"
+  }
+}
