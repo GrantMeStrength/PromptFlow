@@ -1,7 +1,8 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Menu, protocol, net } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import vm from 'vm'
+import { pathToFileURL } from 'url'
 
 const isDev = process.env.NODE_ENV !== 'production'
 
@@ -25,11 +26,10 @@ function createWindow() {
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173')
+    mainWindow.webContents.openDevTools({ mode: 'detach' })
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
+    mainWindow.loadURL('app://promptflow/index.html')
   }
-  // Always open DevTools for debugging
-  mainWindow.webContents.openDevTools({ mode: 'detach' })
 
   setupMenu()
 }
@@ -150,7 +150,27 @@ ipcMain.handle('run-code', async (_event, code: string, input: unknown) => {
 
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
-app.whenReady().then(createWindow)
+// Register custom protocol to serve production build without file:// CORS issues
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'app', privileges: { secure: true, standard: true, supportFetchAPI: true } },
+])
+
+app.whenReady().then(() => {
+  // Serve dist/renderer via app:// scheme in production
+  protocol.handle('app', (request) => {
+    const url = new URL(request.url)
+    const rendererDist = path.join(__dirname, '../renderer')
+    // Strip leading slash from pathname, default to index.html
+    let filePath = url.pathname.replace(/^\//, '')
+    if (!filePath || filePath === 'promptflow/') filePath = 'index.html'
+    // Strip the "promptflow/" prefix used as hostname placeholder
+    filePath = filePath.replace(/^promptflow\//, '')
+    const fullPath = path.join(rendererDist, filePath)
+    return net.fetch(pathToFileURL(fullPath).toString())
+  })
+
+  createWindow()
+})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
