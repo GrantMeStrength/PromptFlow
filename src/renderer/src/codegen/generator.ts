@@ -82,6 +82,11 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
     for (const codeLine of nodeCode.split('\n')) {
       lines.push(`  ${codeLine}`)
     }
+    // If code uses `result =` pattern without an explicit `return`, return result automatically
+    const hasExplicitReturn = /^\s*return\s/m.test(nodeCode)
+    if (!hasExplicitReturn) {
+      lines.push(`  return result`)
+    }
     lines.push(`}`)
     lines.push(``)
   }
