@@ -307,16 +307,31 @@ export function NodeInspector() {
               </div>
             )}
             {data.uiKind === 'file' && (
-              <div>
-                <label className="text-[11px] uppercase tracking-widest text-slate-500 block mb-1.5">
-                  Accepted File Types
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[11px] uppercase tracking-widest text-slate-500 block mb-1.5">
+                    Accepted File Types
+                  </label>
+                  <input
+                    className="w-full bg-[#0f0f1a] text-slate-300 text-xs rounded-lg px-2.5 py-2 border border-[#2a2a3f] focus:border-fuchsia-500 outline-none font-mono"
+                    value={data.uiAccept ?? ''}
+                    placeholder=".txt,.md,.pdf"
+                    onChange={(e) => updateNodeData(node.id, { uiAccept: e.target.value })}
+                  />
+                </div>
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <div
+                    onClick={() => updateNodeData(node.id, { uiMultiple: !data.uiMultiple })}
+                    className={`w-8 h-4 rounded-full transition-colors flex items-center px-0.5 ${
+                      data.uiMultiple ? 'bg-fuchsia-600' : 'bg-[#2a2a3f]'
+                    }`}
+                  >
+                    <div className={`w-3 h-3 rounded-full bg-white transition-transform ${
+                      data.uiMultiple ? 'translate-x-4' : 'translate-x-0'
+                    }`} />
+                  </div>
+                  <span className="text-xs text-slate-400">Allow multiple files</span>
                 </label>
-                <input
-                  className="w-full bg-[#0f0f1a] text-slate-300 text-xs rounded-lg px-2.5 py-2 border border-[#2a2a3f] focus:border-fuchsia-500 outline-none font-mono"
-                  value={data.uiAccept ?? ''}
-                  placeholder=".txt,.md,.pdf"
-                  onChange={(e) => updateNodeData(node.id, { uiAccept: e.target.value })}
-                />
               </div>
             )}
             {data.uiKind === 'choice' && (

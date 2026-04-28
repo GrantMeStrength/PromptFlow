@@ -74,7 +74,11 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
       // UI nodes read their value from the __uiInputs__ global injected by the runtime
       switch (node.data.uiKind) {
         case 'file':
-          lines.push(`  return __uiInputs__['${node.id}'] ?? { filename: '', content: '', type: '', size: 0 }`)
+          if (node.data.uiMultiple) {
+            lines.push(`  return __uiInputs__['${node.id}'] ?? { files: [] }`)
+          } else {
+            lines.push(`  return __uiInputs__['${node.id}'] ?? { filename: '', content: '', type: '', size: 0 }`)
+          }
           break
         case 'choice':
           lines.push(`  return __uiInputs__['${node.id}'] ?? { choice: '', index: -1 }`)

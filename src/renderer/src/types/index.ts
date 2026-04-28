@@ -39,6 +39,7 @@ export interface NodeData {
   uiOptions?: string[]
   uiPlaceholder?: string
   uiAccept?: string
+  uiMultiple?: boolean
 }
 
 // ─── ReactFlow Node / Edge wrappers ──────────────────────────────────────────
