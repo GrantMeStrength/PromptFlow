@@ -205,10 +205,11 @@ ipcMain.handle('call-llm', async (_event, prompt: string, systemPrompt?: string)
   }
 })
 
-ipcMain.handle('run-code', async (_event, code: string, input: unknown) => {
+ipcMain.handle('run-code', async (_event, code: string, input: unknown, uiInputs?: Record<string, unknown>) => {
   try {
     const sandbox: Record<string, unknown> = {
       inputs: input,
+      __uiInputs__: uiInputs ?? {},
       console,
       Date,
       Math,

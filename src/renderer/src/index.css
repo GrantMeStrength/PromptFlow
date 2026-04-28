@@ -29,8 +29,13 @@
 ::-webkit-scrollbar-track { background: #1e1e2e; }
 ::-webkit-scrollbar-thumb { background: #3f3f5a; border-radius: 3px; }
 
+/* Electron window drag regions */
+.drag-region   { -webkit-app-region: drag; }
+.no-drag       { -webkit-app-region: no-drag; }
+
 /* Toolbar button utility */
 .toolbar-btn {
+  -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
   gap: 0.375rem;

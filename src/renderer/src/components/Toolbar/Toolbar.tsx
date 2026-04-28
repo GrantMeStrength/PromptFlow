@@ -1,9 +1,37 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import {
   Play, Square, FilePlus, FolderOpen, Save, Code2,
-  Loader2, ChevronDown, ChevronUp, Settings,
+  Loader2, ChevronDown, ChevronUp, Settings, BookOpen,
 } from 'lucide-react'
 import { useFlowStore } from '../../store/flowStore'
+import { demoProject } from '../../demo/documentAnalysis'
+import { emailComposerProject } from '../../demo/emailComposer'
+import { codeReviewProject } from '../../demo/codeReview'
+import { meetingNotesProject } from '../../demo/meetingNotes'
+import type { FlowProject } from '../../types'
+
+const EXAMPLES: { label: string; description: string; project: FlowProject }[] = [
+  {
+    label: 'Document Analysis',
+    description: 'Keywords · word count · LLM summary',
+    project: demoProject,
+  },
+  {
+    label: 'Email Composer',
+    description: 'Choice + text UI → LLM → metadata',
+    project: emailComposerProject,
+  },
+  {
+    label: 'Code Review',
+    description: 'File upload + focus choice → LLM review',
+    project: codeReviewProject,
+  },
+  {
+    label: 'Meeting Notes',
+    description: 'Parallel LLMs → actions + summary',
+    project: meetingNotesProject,
+  },
+]
 
 interface ToolbarProps {
   showOutput: boolean
@@ -17,6 +45,19 @@ export function Toolbar({ showOutput, onToggleOutput, showCode, onToggleCode, on
   const { project, isRunning, runPipeline, newProject, loadProject, getProject, getGeneratedCode } =
     useFlowStore()
   const [saving, setSaving] = useState(false)
+  const [showExamples, setShowExamples] = useState(false)
+  const examplesRef = useRef<HTMLDivElement>(null)
+
+  // Close examples dropdown when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (examplesRef.current && !examplesRef.current.contains(e.target as Node)) {
+        setShowExamples(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   const handleNew = () => {
     if (confirm('Start a new project? Unsaved changes will be lost.')) newProject()
@@ -57,9 +98,10 @@ export function Toolbar({ showOutput, onToggleOutput, showCode, onToggleCode, on
   }
 
   return (
-    <header className="flex items-center gap-2 px-4 py-2 bg-[#0d0d1a] border-b border-[#2a2a3f] shrink-0">
-      {/* Logo */}
-      <div className="flex items-center gap-2 mr-4">
+    // drag-region makes the whole bar draggable; buttons declare no-drag individually via CSS
+    <header className="drag-region flex items-center gap-2 px-4 py-2 bg-[#0d0d1a] border-b border-[#2a2a3f] shrink-0 pl-[76px]">
+      {/* Logo — pl-[76px] above clears the macOS traffic-light buttons (~68px wide) */}
+      <div className="no-drag flex items-center gap-2 mr-4">
         <div className="w-6 h-6 rounded bg-indigo-600 flex items-center justify-center">
           <span className="text-white text-[11px] font-black">PF</span>
         </div>
@@ -97,6 +139,41 @@ export function Toolbar({ showOutput, onToggleOutput, showCode, onToggleCode, on
         {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
         <span>Save</span>
       </button>
+
+      {/* Examples dropdown */}
+      <div ref={examplesRef} className="no-drag relative">
+        <button
+          onClick={() => setShowExamples((v) => !v)}
+          className={`toolbar-btn ${showExamples ? 'text-amber-300' : ''}`}
+          title="Load an example project"
+        >
+          <BookOpen size={15} />
+          <span>Examples</span>
+          {showExamples ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+        </button>
+        {showExamples && (
+          <div className="absolute top-full left-0 mt-1 w-60 bg-[#13131f] border border-[#2a2a3f] rounded-xl shadow-2xl z-50 overflow-hidden">
+            <div className="px-3 py-2 text-[10px] uppercase tracking-widest text-slate-500 border-b border-[#2a2a3f]">
+              Example Projects
+            </div>
+            {EXAMPLES.map((ex) => (
+              <button
+                key={ex.project.id}
+                onClick={() => {
+                  if (confirm(`Load "${ex.label}"? Unsaved changes will be lost.`)) {
+                    loadProject(ex.project)
+                    setShowExamples(false)
+                  }
+                }}
+                className="w-full flex flex-col items-start px-3 py-2.5 hover:bg-[#1e1e2e] transition-colors text-left border-b border-[#1a1a2a] last:border-0"
+              >
+                <span className="text-xs font-medium text-slate-200">{ex.label}</span>
+                <span className="text-[11px] text-slate-500 mt-0.5">{ex.description}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="w-px h-5 bg-[#2a2a3f] mx-1" />
 
@@ -138,7 +215,7 @@ export function Toolbar({ showOutput, onToggleOutput, showCode, onToggleCode, on
         onClick={() => runPipeline()}
         disabled={isRunning}
         className={`
-          flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
+          no-drag flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
           transition-all duration-150
           ${isRunning
             ? 'bg-indigo-800/50 text-indigo-400 cursor-not-allowed'

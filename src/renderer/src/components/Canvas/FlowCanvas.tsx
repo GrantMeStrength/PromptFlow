@@ -8,7 +8,7 @@ import ReactFlow, {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { useFlowStore } from '../../store/flowStore'
-import { InputNode, FunctionNode, LLMNode, DecisionNode, OutputNode } from './nodes/NodeTypes'
+import { InputNode, FunctionNode, LLMNode, DecisionNode, OutputNode, PipeNode, UINode } from './nodes/NodeTypes'
 
 const nodeTypes: NodeTypes = {
   input: InputNode,
@@ -16,6 +16,8 @@ const nodeTypes: NodeTypes = {
   llm: LLMNode,
   decision: DecisionNode,
   output: OutputNode,
+  pipe: PipeNode,
+  ui: UINode,
 }
 
 const minimapNodeColor = (node: { type?: string }) => {
@@ -25,6 +27,8 @@ const minimapNodeColor = (node: { type?: string }) => {
     llm: '#a855f7',
     decision: '#f59e0b',
     output: '#f43f5e',
+    pipe: '#06b6d4',
+    ui: '#d946ef',
   }
   return colors[node.type ?? 'function'] ?? '#6366f1'
 }

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { addEdge, applyNodeChanges, applyEdgeChanges } from 'reactflow'
+import { applyNodeChanges, applyEdgeChanges } from 'reactflow'
 import type { Connection, NodeChange, EdgeChange } from 'reactflow'
 import type { FlowNode, FlowEdge, FlowProject, NodeData, NodeKind } from '../types'
 import { demoProject } from '../demo/documentAnalysis'
@@ -14,15 +14,22 @@ interface FlowState {
   runOutput: string
   runOutputIsHtml: boolean
   showOutput: boolean
+  /** ID of a newly-created pipe node waiting for LLM auto-generation */
+  pendingPipeNodeId: string | null
+  /** True when pipeline has UI nodes and is waiting for user input */
+  pendingUiRun: boolean
+  /** UI nodes info in the current pending run (in topo order) */
+  uiNodesInfo: Array<{ nodeId: string; data: NodeData }>
 
   // Node / Edge mutations
   onNodesChange: (changes: NodeChange[]) => void
   onEdgesChange: (changes: EdgeChange[]) => void
   onConnect: (connection: Connection) => void
   selectNode: (id: string | null) => void
-  addNode: (kind: NodeKind, position?: { x: number; y: number }) => FlowNode
+  addNode: (kind: NodeKind, position?: { x: number; y: number }, extraData?: Partial<NodeData>) => FlowNode
   updateNodeData: (id: string, data: Partial<NodeData>) => void
   deleteNode: (id: string) => void
+  clearPendingPipe: () => void
 
   // Project I/O
   newProject: () => void
@@ -31,11 +38,15 @@ interface FlowState {
 
   // Execution
   runPipeline: () => Promise<void>
+  submitUiInputs: (values: Record<string, unknown>) => Promise<void>
+  cancelUiRun: () => void
   clearOutput: () => void
   toggleOutput: () => void
 
   // Code gen
   getGeneratedCode: () => string
+  // Internal — do not call directly
+  _executePipeline: (uiInputs: Record<string, unknown>) => Promise<void>
 }
 
 const defaultNodeData = (kind: NodeKind): NodeData => {
@@ -81,6 +92,23 @@ const defaultNodeData = (kind: NodeKind): NodeData => {
       outputs: [],
       code: `// Output node – returns the final value\nreturn inputs.value`,
     },
+    pipe: {
+      label: 'Mapping',
+      description: 'Maps data from one node to another.',
+      inputs: [{ name: 'value', type: 'any' }],
+      outputs: [{ name: 'value', type: 'any' }],
+      code: `// Pass-through by default; edit to transform the data\nreturn inputs.value`,
+    },
+    ui: {
+      label: 'Text Input',
+      description: 'Asks the user to enter text before the pipeline runs.',
+      inputs: [],
+      outputs: [{ name: 'value', type: 'string' }],
+      uiKind: 'text',
+      uiLabel: 'Enter your text:',
+      uiPlaceholder: 'Type here…',
+      code: `// Value is collected from the user before the pipeline runs`,
+    },
   }
   return {
     kind,
@@ -102,6 +130,9 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   runOutput: '',
   runOutputIsHtml: false,
   showOutput: false,
+  pendingPipeNodeId: null,
+  pendingUiRun: false,
+  uiNodesInfo: [],
 
   onNodesChange: (changes) =>
     set((s) => ({ nodes: applyNodeChanges(changes, s.nodes) as FlowNode[] })),
@@ -109,14 +140,57 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   onEdgesChange: (changes) =>
     set((s) => ({ edges: applyEdgeChanges(changes, s.edges) as FlowEdge[] })),
 
-  onConnect: (connection) =>
-    set((s) => ({ edges: addEdge({ ...connection, animated: true }, s.edges) as FlowEdge[] })),
+  onConnect: (connection) => {
+    const { nodes } = get()
+    const sourceNode = nodes.find((n) => n.id === connection.source)
+    const targetNode = nodes.find((n) => n.id === connection.target)
+
+    if (!sourceNode || !targetNode) return
+
+    // Place pipe node at the midpoint between source and target
+    const midX = (sourceNode.position.x + targetNode.position.x) / 2 + 80
+    const midY = (sourceNode.position.y + targetNode.position.y) / 2 + 20
+
+    const pipeId = `pipe-${++nodeCounter}`
+    const pipeData: NodeData = {
+      ...defaultNodeData('pipe'),
+      label: 'Mapping',
+      pipeSourceId: sourceNode.id,
+      pipeTargetId: targetNode.id,
+    }
+    const pipeNode: FlowNode = { id: pipeId, type: 'pipe', position: { x: midX, y: midY }, data: pipeData }
+
+    const edgeStyle = { animated: true, style: { stroke: '#06b6d4', strokeWidth: 1.5, strokeDasharray: '4 3' } }
+    const edgeIn: FlowEdge = {
+      id: `e-${connection.source}-${pipeId}`,
+      source: connection.source,
+      sourceHandle: connection.sourceHandle ?? undefined,
+      target: pipeId,
+      targetHandle: 'value',
+      ...edgeStyle,
+    }
+    const edgeOut: FlowEdge = {
+      id: `e-${pipeId}-${connection.target}`,
+      source: pipeId,
+      sourceHandle: 'value',
+      target: connection.target,
+      targetHandle: connection.targetHandle ?? undefined,
+      ...edgeStyle,
+    }
+
+    set((s) => ({
+      nodes: [...s.nodes, pipeNode],
+      edges: [...s.edges, edgeIn, edgeOut],
+      selectedNodeId: pipeId,
+      pendingPipeNodeId: pipeId,
+    }))
+  },
 
   selectNode: (id) => set({ selectedNodeId: id }),
 
-  addNode: (kind, position = { x: 400, y: 200 }) => {
+  addNode: (kind, position = { x: 400, y: 200 }, extraData?) => {
     const id = `node-${++nodeCounter}`
-    const data = defaultNodeData(kind)
+    const data: NodeData = { ...defaultNodeData(kind), ...extraData }
     const node: FlowNode = { id, type: kind, position, data }
     set((s) => ({ nodes: [...s.nodes, node] }))
     return node
@@ -135,6 +209,8 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       edges: s.edges.filter((e) => e.source !== id && e.target !== id),
       selectedNodeId: s.selectedNodeId === id ? null : s.selectedNodeId,
     })),
+
+  clearPendingPipe: () => set({ pendingPipeNodeId: null }),
 
   newProject: () => {
     const project: FlowProject = {
@@ -159,6 +235,33 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   },
 
   runPipeline: async () => {
+    const { nodes, edges } = get()
+
+    // Check for UI interaction nodes — collect inputs first
+    const uiNodes = nodes.filter((n) => n.data.kind === 'ui')
+    if (uiNodes.length > 0) {
+      // Sort by x position (left-to-right = pipeline order)
+      const sorted = [...uiNodes].sort((a, b) => a.position.x - b.position.x)
+      set({
+        pendingUiRun: true,
+        uiNodesInfo: sorted.map((n) => ({ nodeId: n.id, data: n.data })),
+        showOutput: true,
+        runOutput: '',
+      })
+      return
+    }
+
+    await get()._executePipeline({})
+  },
+
+  submitUiInputs: async (values) => {
+    set({ pendingUiRun: false, uiNodesInfo: [] })
+    await get()._executePipeline(values)
+  },
+
+  cancelUiRun: () => set({ pendingUiRun: false, uiNodesInfo: [] }),
+
+  _executePipeline: async (uiInputs: Record<string, unknown>) => {
     const { nodes, edges, updateNodeData } = get()
     set({ isRunning: true, runOutput: '▶ Running pipeline...\n', showOutput: true })
 
@@ -168,14 +271,14 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       let result: unknown
 
       if (api) {
-        const res = await api.runCode(code, { text: 'Sample document text for analysis.' })
+        const res = await api.runCode(code, {}, uiInputs)
         if (!res.success) throw new Error(res.error)
         result = res.result
       } else {
         // Browser fallback: run in eval (dev only)
         // eslint-disable-next-line no-new-func
-        const fn = new Function('inputs', code)
-        result = fn({ text: 'Sample document text for analysis.' })
+        const fn = new Function('inputs', '__uiInputs__', code)
+        result = fn({}, uiInputs)
         if (result instanceof Promise) result = await result
       }
 

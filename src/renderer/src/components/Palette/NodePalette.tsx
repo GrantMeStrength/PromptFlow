@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Download, Cpu, Terminal, GitBranch, Upload, Layers, BookOpen } from 'lucide-react'
+import { Download, Cpu, Terminal, GitBranch, Upload, Layers, BookOpen, MessageSquare, FileText, ListChecks } from 'lucide-react'
 import type { NodeKind, NodeData } from '../../types'
 import { useFlowStore } from '../../store/flowStore'
 
@@ -57,7 +57,43 @@ const paletteItems: PaletteItem[] = [
   },
 ]
 
-// ─── Library: pre-built modules ──────────────────────────────────────────────
+// ─── Interaction node variants ───────────────────────────────────────────────
+
+interface InteractionItem {
+  uiKind: 'text' | 'file' | 'choice'
+  icon: React.ReactNode
+  label: string
+  desc: string
+  defaultLabel: string
+  defaultOptions?: string[]
+}
+
+const interactionItems: InteractionItem[] = [
+  {
+    uiKind: 'text',
+    icon: <MessageSquare size={18} />,
+    label: 'Text Input',
+    desc: 'Prompt user to enter text',
+    defaultLabel: 'Enter your text:',
+  },
+  {
+    uiKind: 'file',
+    icon: <FileText size={18} />,
+    label: 'File Upload',
+    desc: 'Let user pick a file to read',
+    defaultLabel: 'Choose a file:',
+  },
+  {
+    uiKind: 'choice',
+    icon: <ListChecks size={18} />,
+    label: 'Multiple Choice',
+    desc: 'Ask user to pick an option',
+    defaultLabel: 'Choose an option:',
+    defaultOptions: ['Option A', 'Option B', 'Option C'],
+  },
+]
+
+
 
 interface LibraryItem {
   kind: NodeKind
@@ -508,6 +544,18 @@ export function NodePalette() {
     selectNode(node.id)
   }
 
+  const handleAddInteraction = (item: InteractionItem) => {
+    const x = 350 + Math.random() * 100
+    const y = 150 + Math.random() * 150
+    const node = addNode('ui', { x, y }, {
+      label: item.label,
+      uiKind: item.uiKind,
+      uiLabel: item.defaultLabel,
+      uiOptions: item.defaultOptions,
+    })
+    selectNode(node.id)
+  }
+
   const handleAddLibrary = (item: LibraryItem) => {
     const x = 350 + Math.random() * 100
     const y = 150 + Math.random() * 150
@@ -561,6 +609,25 @@ export function NodePalette() {
               </div>
             </button>
           ))}
+
+          {/* Interaction nodes */}
+          <div className="px-1 pt-3 pb-1 text-[10px] uppercase tracking-widest text-slate-600">
+            Interaction
+          </div>
+          {interactionItems.map((item) => (
+            <button
+              key={item.uiKind}
+              onClick={() => handleAddInteraction(item)}
+              className="flex items-start gap-3 p-3 rounded-xl border text-left transition-all duration-150 cursor-pointer bg-fuchsia-900/30 border-fuchsia-700/50 hover:border-fuchsia-500"
+            >
+              <span className="text-fuchsia-400 shrink-0 mt-0.5">{item.icon}</span>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-fuchsia-400">{item.label}</div>
+                <div className="text-[11px] text-slate-500 leading-tight mt-0.5">{item.desc}</div>
+              </div>
+            </button>
+          ))}
+
           <div className="px-1 pt-2 text-[10px] text-slate-600 leading-relaxed">
             Click to add a blank node, then connect ports by dragging.
           </div>

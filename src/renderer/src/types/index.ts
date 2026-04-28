@@ -10,7 +10,7 @@ export interface PortDef {
 
 // ─── Node Types ───────────────────────────────────────────────────────────────
 
-export type NodeKind = 'input' | 'function' | 'llm' | 'decision' | 'output'
+export type NodeKind = 'input' | 'function' | 'llm' | 'decision' | 'output' | 'pipe' | 'ui'
 
 export interface NodeData {
   label: string
@@ -30,6 +30,15 @@ export interface NodeData {
   /** Execution result from last run */
   lastResult?: unknown
   hasError?: boolean
+  /** For pipe nodes: the IDs of the nodes being connected */
+  pipeSourceId?: string
+  pipeTargetId?: string
+  /** For UI interaction nodes */
+  uiKind?: 'text' | 'file' | 'choice'
+  uiLabel?: string
+  uiOptions?: string[]
+  uiPlaceholder?: string
+  uiAccept?: string
 }
 
 // ─── ReactFlow Node / Edge wrappers ──────────────────────────────────────────
@@ -65,7 +74,7 @@ export interface LLMSettings {
 export interface ElectronAPI {
   saveProject: (project: FlowProject) => Promise<{ success: boolean; path?: string; error?: string }>
   loadProject: () => Promise<{ success: boolean; project?: FlowProject; error?: string }>
-  runCode: (code: string, input: unknown) => Promise<{ success: boolean; result?: unknown; error?: string }>
+  runCode: (code: string, input: unknown, uiInputs?: Record<string, unknown>) => Promise<{ success: boolean; result?: unknown; error?: string }>
   callLLM: (prompt: string, systemPrompt?: string) => Promise<{ success: boolean; result?: string; error?: string }>
   getSettings: () => Promise<LLMSettings>
   saveSettings: (settings: LLMSettings) => Promise<{ success: boolean }>

@@ -7,6 +7,7 @@ import { PromptBar } from './components/PromptBar/PromptBar'
 import { OutputPanel } from './components/Canvas/OutputPanel'
 import { CodeViewer } from './components/Canvas/CodeViewer'
 import { SettingsModal } from './components/Settings/SettingsModal'
+import UIInputModal from './components/UIInputModal/UIInputModal'
 import { useFlowStore } from './store/flowStore'
 
 export default function App() {
@@ -41,6 +42,7 @@ export default function App() {
       <PromptBar />
 
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      <UIInputModal />
     </div>
   )
 }

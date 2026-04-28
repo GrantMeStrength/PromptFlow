@@ -2,7 +2,7 @@ import React, { memo } from 'react'
 import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 import type { NodeData } from '../../../types'
-import { Download, Upload, Cpu, GitBranch, Terminal } from 'lucide-react'
+import { Download, Upload, Cpu, GitBranch, Terminal, ArrowRightLeft, MessageSquare, FileText, ListChecks } from 'lucide-react'
 import { useFlowStore } from '../../../store/flowStore'
 
 // ─── Shared node styles ───────────────────────────────────────────────────────
@@ -115,7 +115,124 @@ const BaseNode = memo(({ id, data, selected }: BaseNodeProps) => {
 
 BaseNode.displayName = 'BaseNode'
 
-// Export typed wrappers so ReactFlow can register each kind
+// ─── Pipe Node ────────────────────────────────────────────────────────────────
+// Compact pill node auto-inserted between two connected nodes
+
+export const PipeNode = memo(({ id, data, selected }: NodeProps<NodeData>) => {
+  const { selectNode, pendingPipeNodeId } = useFlowStore()
+  const isPending = pendingPipeNodeId === id
+
+  return (
+    <div
+      onClick={() => selectNode(id)}
+      className={`
+        relative flex items-center justify-center gap-1.5
+        w-36 h-9 rounded-full px-3
+        bg-cyan-950/90 border cursor-pointer transition-all duration-150
+        ${isPending ? 'border-cyan-400 ring-2 ring-cyan-400/60 animate-pulse' : 'border-cyan-700/60'}
+        ${selected && !isPending ? 'ring-2 ring-cyan-400 border-cyan-500' : ''}
+        shadow-md
+      `}
+    >
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="value"
+        className="!bg-cyan-500 !border-cyan-800 !w-2.5 !h-2.5"
+      />
+      <ArrowRightLeft size={11} className="text-cyan-400 shrink-0" />
+      <span className="text-[10px] font-medium text-cyan-300 truncate leading-none">
+        {data.label}
+      </span>
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="value"
+        className="!bg-cyan-500 !border-cyan-800 !w-2.5 !h-2.5"
+      />
+    </div>
+  )
+})
+
+PipeNode.displayName = 'PipeNode'
+
+// ─── UI Interaction Node ──────────────────────────────────────────────────────
+// Represents a user interaction point: text input, file upload, or multiple choice
+
+export const UINode = memo(({ id, data, selected }: NodeProps<NodeData>) => {
+  const { selectNode } = useFlowStore()
+
+  const uiIcon =
+    data.uiKind === 'file' ? <FileText size={14} /> :
+    data.uiKind === 'choice' ? <ListChecks size={14} /> :
+    <MessageSquare size={14} />
+
+  const uiKindLabel =
+    data.uiKind === 'file' ? 'FILE' :
+    data.uiKind === 'choice' ? 'CHOICE' :
+    'TEXT INPUT'
+
+  return (
+    <div
+      onClick={() => selectNode(id)}
+      className={`
+        min-w-[160px] max-w-[200px] rounded-xl border-2 border-fuchsia-500
+        bg-fuchsia-900/80 shadow-lg cursor-pointer transition-all duration-150
+        ${selected ? 'ring-2 ring-fuchsia-400 ring-offset-1 ring-offset-transparent' : ''}
+      `}
+    >
+      {/* Single input handle (optional — ui nodes are usually sources) */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="value"
+        style={{ top: '50%' }}
+        className="!bg-fuchsia-400 !border-fuchsia-700"
+      />
+
+      {/* Header */}
+      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-fuchsia-500 border-opacity-40">
+        <span className="text-fuchsia-300 opacity-80">{uiIcon}</span>
+        <span className="text-[10px] font-bold text-fuchsia-400 tracking-widest">{uiKindLabel}</span>
+      </div>
+
+      {/* Body */}
+      <div className="px-3 py-2">
+        <div className="text-sm font-semibold text-white leading-tight">{data.label}</div>
+        {data.uiLabel && (
+          <div className="text-[11px] text-fuchsia-300/70 mt-0.5 line-clamp-2 italic">
+            "{data.uiLabel}"
+          </div>
+        )}
+        {data.uiKind === 'choice' && data.uiOptions && data.uiOptions.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {data.uiOptions.slice(0, 3).map((opt) => (
+              <span key={opt} className="text-[10px] bg-fuchsia-800/60 text-fuchsia-300 px-1.5 py-0.5 rounded-full">
+                {opt}
+              </span>
+            ))}
+            {data.uiOptions.length > 3 && (
+              <span className="text-[10px] text-fuchsia-500">+{data.uiOptions.length - 3}</span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Output handle */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="value"
+        style={{ top: '50%' }}
+        className="!bg-fuchsia-400 !border-fuchsia-700"
+      />
+    </div>
+  )
+})
+
+UINode.displayName = 'UINode'
+
+
 export const InputNode = memo((props: NodeProps<NodeData>) => <BaseNode {...props} />)
 export const FunctionNode = memo((props: NodeProps<NodeData>) => <BaseNode {...props} />)
 export const LLMNode = memo((props: NodeProps<NodeData>) => <BaseNode {...props} />)

@@ -70,22 +70,36 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
     const fnName = nodeToFnName(node.id, node.data.label)
     lines.push(`// ── Node: ${node.data.label} (${node.data.kind}) ──`)
     lines.push(`async function ${fnName}(inputs) {`)
-    // For LLM nodes inject model + prompt template as local constants
-    if (node.data.kind === 'llm') {
-      const model = (node.data.llmModel || 'gpt-4o-mini').replace(/`/g, '\\`')
-      const tmpl = (node.data.llmPromptTemplate || '{{text}}').replace(/`/g, '\\`')
-      lines.push(`  const llmModel = \`${model}\``)
-      lines.push(`  const llmPromptTemplate = \`${tmpl}\``)
-    }
-    // Indent the node's code
-    const nodeCode = node.data.code || 'return inputs'
-    for (const codeLine of nodeCode.split('\n')) {
-      lines.push(`  ${codeLine}`)
-    }
-    // If code uses `result =` pattern without an explicit `return`, return result automatically
-    const hasExplicitReturn = /^\s*return\s/m.test(nodeCode)
-    if (!hasExplicitReturn) {
-      lines.push(`  return result`)
+    if (node.data.kind === 'ui') {
+      // UI nodes read their value from the __uiInputs__ global injected by the runtime
+      switch (node.data.uiKind) {
+        case 'file':
+          lines.push(`  return __uiInputs__['${node.id}'] ?? { filename: '', content: '', type: '', size: 0 }`)
+          break
+        case 'choice':
+          lines.push(`  return __uiInputs__['${node.id}'] ?? { choice: '', index: -1 }`)
+          break
+        default: // 'text'
+          lines.push(`  return __uiInputs__['${node.id}'] ?? { value: '' }`)
+      }
+    } else {
+      // For LLM nodes inject model + prompt template as local constants
+      if (node.data.kind === 'llm') {
+        const model = (node.data.llmModel || 'gpt-4o-mini').replace(/`/g, '\\`')
+        const tmpl = (node.data.llmPromptTemplate || '{{text}}').replace(/`/g, '\\`')
+        lines.push(`  const llmModel = \`${model}\``)
+        lines.push(`  const llmPromptTemplate = \`${tmpl}\``)
+      }
+      // Indent the node's code
+      const nodeCode = node.data.code || 'return inputs'
+      for (const codeLine of nodeCode.split('\n')) {
+        lines.push(`  ${codeLine}`)
+      }
+      // If code uses `result =` pattern without an explicit `return`, return result automatically
+      const hasExplicitReturn = /^\s*return\s/m.test(nodeCode)
+      if (!hasExplicitReturn) {
+        lines.push(`  return result`)
+      }
     }
     lines.push(`}`)
     lines.push(``)
@@ -101,19 +115,23 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
     const fnName = nodeToFnName(node.id, node.data.label)
     const sources = inputSources.get(node.id)
 
-    // Build the inputs object for this node
-    const inputParts: string[] = []
-    if (node.data.kind === 'input') {
-      inputParts.push(`...initialInput`)
-    } else if (sources) {
-      for (const [targetHandle, { srcId, handle }] of sources) {
-        const srcFn = `results["${srcId}"]`
-        inputParts.push(`"${targetHandle}": ${srcFn}?.["${handle}"] ?? ${srcFn}`)
+    if (node.data.kind === 'ui') {
+      // UI nodes get their value from __uiInputs__ — no edge wiring needed
+      lines.push(`  results["${node.id}"] = await ${fnName}({})`)
+    } else {
+      // Build the inputs object for this node
+      const inputParts: string[] = []
+      if (node.data.kind === 'input') {
+        inputParts.push(`...initialInput`)
+      } else if (sources) {
+        for (const [targetHandle, { srcId, handle }] of sources) {
+          const srcFn = `results["${srcId}"]`
+          inputParts.push(`"${targetHandle}": ${srcFn}?.["${handle}"] ?? ${srcFn}`)
+        }
       }
+      const inputsExpr = `{ ${inputParts.join(', ')} }`
+      lines.push(`  results["${node.id}"] = await ${fnName}(${inputsExpr})`)
     }
-
-    const inputsExpr = `{ ${inputParts.join(', ')} }`
-    lines.push(`  results["${node.id}"] = await ${fnName}(${inputsExpr})`)
   }
 
   // Return last node's output
