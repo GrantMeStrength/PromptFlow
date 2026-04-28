@@ -66,6 +66,7 @@ export interface ElectronAPI {
   saveProject: (project: FlowProject) => Promise<{ success: boolean; path?: string; error?: string }>
   loadProject: () => Promise<{ success: boolean; project?: FlowProject; error?: string }>
   runCode: (code: string, input: unknown) => Promise<{ success: boolean; result?: unknown; error?: string }>
+  callLLM: (prompt: string, systemPrompt?: string) => Promise<{ success: boolean; result?: string; error?: string }>
   getSettings: () => Promise<LLMSettings>
   saveSettings: (settings: LLMSettings) => Promise<{ success: boolean }>
   onMenuAction: (callback: (action: string) => void) => () => void

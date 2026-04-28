@@ -3,50 +3,31 @@ import { Sparkles, Loader2, Send } from 'lucide-react'
 import type { NodeKind } from '../../types'
 import { useFlowStore } from '../../store/flowStore'
 
-// ─── Simple command parser ────────────────────────────────────────────────────
-// In production this would call an LLM. For the prototype we parse structured
-// natural-language commands to demonstrate the concept.
+// ─── LLM system prompt ───────────────────────────────────────────────────────
 
-interface ParsedCommand {
-  action: 'add' | 'describe' | 'connect' | 'delete' | 'rename' | 'unknown'
-  nodeKind?: NodeKind
-  nodeName?: string
-  description?: string
-  raw: string
+const SYSTEM_PROMPT = `You are a visual programming assistant for PromptFlow, a node-graph IDE.
+The user describes changes to their pipeline in natural language.
+
+Available node kinds: input, function, llm, decision, output
+
+Respond with ONLY a valid JSON object — no markdown, no explanation, just the JSON.
+
+Schema:
+{
+  "action": "add" | "describe" | "unknown",
+  "nodeKind": "input" | "function" | "llm" | "decision" | "output",
+  "nodeName": "string",
+  "description": "string (one sentence description of what the node does)",
+  "code": "string (optional JS code body for function nodes — receives 'inputs' object, set 'result' variable)",
+  "message": "string (short friendly message to show the user)"
 }
 
-function parseCommand(text: string): ParsedCommand {
-  const lower = text.toLowerCase().trim()
-
-  // "add [a/an] <kind> node [called/named <name>] [that/which ...]"
-  const addMatch = lower.match(
-    /add\s+(?:a\s+|an\s+)?(input|function|func|llm|decision|output)\s+node(?:\s+(?:called|named)\s+"?([^"]+?)"?)?(?:\s+(?:that|which|to)\s+(.+))?$/
-  )
-  if (addMatch) {
-    const kindMap: Record<string, NodeKind> = {
-      input: 'input', function: 'function', func: 'function',
-      llm: 'llm', decision: 'decision', output: 'output',
-    }
-    return {
-      action: 'add',
-      nodeKind: kindMap[addMatch[1]],
-      nodeName: addMatch[2] ? capitalise(addMatch[2]) : undefined,
-      description: addMatch[3] ? capitalise(addMatch[3]) : undefined,
-      raw: text,
-    }
-  }
-
-  // "describe the pipeline" / "what does this do"
-  if (/describe|explain|what does|summarise|summarize/.test(lower)) {
-    return { action: 'describe', raw: text }
-  }
-
-  return { action: 'unknown', raw: text }
-}
-
-function capitalise(s: string) {
-  return s.charAt(0).toUpperCase() + s.slice(1)
-}
+Rules:
+- For "add" actions always include nodeKind, nodeName, description, and message.
+- For function nodes, include simple JS code if the task is straightforward.
+- For "describe" actions summarise the pipeline in the message field.
+- For anything else use action "unknown" and include a helpful suggestion in message.
+- Keep names concise (2–4 words).`
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -66,35 +47,58 @@ export function PromptBar() {
     setThinking(true)
     setHistory((h) => [...h, `> ${text}`])
 
-    // Simulate a short LLM "thinking" delay for UX authenticity
-    await new Promise((r) => setTimeout(r, 600))
+    try {
+      // Build context about the current graph
+      const graphContext = nodes.length > 0
+        ? `Current pipeline "${project.name}" has ${nodes.length} node(s): ${nodes.map(n => `${n.data.label} (${n.data.kind})`).join(', ')}.`
+        : `The pipeline is currently empty.`
 
-    const cmd = parseCommand(text)
+      const prompt = `${graphContext}\n\nUser request: ${text}`
 
-    if (cmd.action === 'add' && cmd.nodeKind) {
-      const x = 300 + Math.random() * 200
-      const y = 100 + Math.random() * 300
-      const node = addNode(cmd.nodeKind, { x, y })
-      const updates: Record<string, string> = { prompt: text }
-      if (cmd.nodeName) updates.label = cmd.nodeName
-      if (cmd.description) updates.description = cmd.description
-      updateNodeData(node.id, updates as Parameters<typeof updateNodeData>[1])
-      selectNode(node.id)
-      setHistory((h) => [
-        ...h,
-        `✅ Added ${cmd.nodeKind} node${cmd.nodeName ? ` "${cmd.nodeName}"` : ''}. Click it to edit.`,
-      ])
-    } else if (cmd.action === 'describe') {
-      const nodeList = nodes.map((n) => `• ${n.data.label} (${n.data.kind})`).join('\n')
-      setHistory((h) => [
-        ...h,
-        `📋 **${project.name}**\n${project.description}\n\nNodes:\n${nodeList || '  (none yet)'}`,
-      ])
-    } else {
-      setHistory((h) => [
-        ...h,
-        `💡 Try: "add a function node called Validate Input that checks the input is not empty"\nor: "add an LLM node named Classify that classifies the document genre"`,
-      ])
+      const res = await window.electronAPI?.callLLM(prompt, SYSTEM_PROMPT)
+
+      if (!res?.success || !res.result) {
+        setHistory((h) => [...h, `❌ ${res?.error ?? 'LLM call failed'}`])
+        return
+      }
+
+      let cmd: {
+        action: string
+        nodeKind?: NodeKind
+        nodeName?: string
+        description?: string
+        code?: string
+        message?: string
+      }
+
+      try {
+        cmd = JSON.parse(res.result)
+      } catch {
+        // LLM didn't return clean JSON — show its response as a message
+        setHistory((h) => [...h, `💬 ${res.result}`])
+        return
+      }
+
+      if (cmd.action === 'add' && cmd.nodeKind) {
+        const x = 300 + Math.random() * 200
+        const y = 100 + Math.random() * 300
+        const node = addNode(cmd.nodeKind, { x, y })
+        const updates: Record<string, string> = { prompt: text }
+        if (cmd.nodeName) updates.label = cmd.nodeName
+        if (cmd.description) updates.description = cmd.description
+        if (cmd.code) updates.code = cmd.code
+        updateNodeData(node.id, updates as Parameters<typeof updateNodeData>[1])
+        selectNode(node.id)
+        setHistory((h) => [...h, `✅ ${cmd.message ?? `Added ${cmd.nodeKind} node "${cmd.nodeName}"`}`])
+      } else if (cmd.action === 'describe') {
+        const nodeList = nodes.map((n) => `• ${n.data.label} (${n.data.kind})`).join('\n')
+        const desc = cmd.message ?? `${project.name}: ${project.description}`
+        setHistory((h) => [...h, `📋 ${desc}${nodeList ? '\n\nNodes:\n' + nodeList : ''}`])
+      } else {
+        setHistory((h) => [...h, `💡 ${cmd.message ?? 'Try: "add a function node that validates email addresses"'}`])
+      }
+    } catch (err) {
+      setHistory((h) => [...h, `❌ Error: ${(err as Error).message}`])
     }
 
     setThinking(false)

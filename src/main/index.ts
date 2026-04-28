@@ -196,6 +196,15 @@ ipcMain.handle('save-settings', (_event, settings: LLMSettings) => {
   }
 })
 
+ipcMain.handle('call-llm', async (_event, prompt: string, systemPrompt?: string) => {
+  try {
+    const result = await callLLM('', prompt, systemPrompt)
+    return { success: true, result }
+  } catch (err) {
+    return { success: false, error: (err as Error).message }
+  }
+})
+
 ipcMain.handle('run-code', async (_event, code: string, input: unknown) => {
   try {
     const sandbox: Record<string, unknown> = {

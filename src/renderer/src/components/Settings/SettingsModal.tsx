@@ -23,22 +23,31 @@ export function SettingsModal({ onClose }: Props) {
   const [showKey, setShowKey] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     const api = window.electronAPI
     if (api) {
-      api.getSettings().then(setForm)
+      api.getSettings().then(setForm).catch(console.error)
     }
   }, [])
 
   const handleSave = async () => {
     const api = window.electronAPI
-    if (!api) return
+    if (!api) {
+      setError('Settings require the Electron runtime.')
+      return
+    }
     setSaving(true)
-    await api.saveSettings(form)
+    setError('')
+    const res = await api.saveSettings(form)
     setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    if (res.success) {
+      setSaved(true)
+      setTimeout(() => onClose(), 800)
+    } else {
+      setError((res as { success: false; error?: string }).error ?? 'Save failed')
+    }
   }
 
   return (
@@ -125,7 +134,9 @@ export function SettingsModal({ onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 px-6 py-4 border-t border-[#2a2a4f]">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-[#2a2a4f]">
+          <div className="text-xs text-red-400">{error}</div>
+          <div className="flex gap-3">
           <button
             onClick={onClose}
             className="px-4 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white border border-[#2a2a4f] hover:border-[#3a3a6f] transition-all"
@@ -142,8 +153,9 @@ export function SettingsModal({ onClose }: Props) {
             ) : (
               <Save size={13} />
             )}
-            {saved ? 'Saved!' : 'Save Settings'}
+            {saved ? 'Saved ✓' : 'Save Settings'}
           </button>
+          </div>
         </div>
       </div>
     </div>

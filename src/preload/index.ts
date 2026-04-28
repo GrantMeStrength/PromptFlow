@@ -5,6 +5,7 @@ const api: ElectronAPI = {
   saveProject: (project) => ipcRenderer.invoke('save-project', project),
   loadProject: () => ipcRenderer.invoke('load-project'),
   runCode: (code, input) => ipcRenderer.invoke('run-code', code, input),
+  callLLM: (prompt, systemPrompt) => ipcRenderer.invoke('call-llm', prompt, systemPrompt),
   getSettings: () => ipcRenderer.invoke('get-settings'),
   saveSettings: (settings: LLMSettings) => ipcRenderer.invoke('save-settings', settings),
   onMenuAction: (callback) => {
