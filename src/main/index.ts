@@ -1,8 +1,7 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu, protocol, net } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Menu, protocol } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import vm from 'vm'
-import { pathToFileURL } from 'url'
 
 // ─── Settings ────────────────────────────────────────────────────────────────
 
@@ -166,11 +165,27 @@ ipcMain.handle('load-project', async () => {
   }
 })
 
-ipcMain.handle('get-settings', () => loadSettings())
+ipcMain.handle('get-settings', () => {
+  try {
+    return loadSettings()
+  } catch (err) {
+    console.error('[settings] load error:', err)
+    return { apiKey: '', baseURL: 'https://api.openai.com/v1', defaultModel: 'gpt-4o-mini' }
+  }
+})
 
 ipcMain.handle('save-settings', (_event, settings: LLMSettings) => {
-  saveSettings(settings)
-  return { success: true }
+  try {
+    const p = settingsPath()
+    console.log('[settings] saving to', p)
+    fs.mkdirSync(path.dirname(p), { recursive: true })
+    fs.writeFileSync(p, JSON.stringify(settings, null, 2), 'utf8')
+    console.log('[settings] saved ok')
+    return { success: true }
+  } catch (err) {
+    console.error('[settings] save error:', err)
+    return { success: false, error: (err as Error).message }
+  }
 })
 
 ipcMain.handle('run-code', async (_event, code: string, input: unknown) => {
@@ -213,16 +228,39 @@ protocol.registerSchemesAsPrivileged([
 
 app.whenReady().then(() => {
   // Serve dist/renderer via app:// scheme in production
-  protocol.handle('app', (request) => {
+  // Use fs.readFile directly (avoids network service) instead of net.fetch
+  const MIME: Record<string, string> = {
+    '.html': 'text/html',
+    '.js':   'application/javascript',
+    '.mjs':  'application/javascript',
+    '.css':  'text/css',
+    '.json': 'application/json',
+    '.png':  'image/png',
+    '.jpg':  'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif':  'image/gif',
+    '.svg':  'image/svg+xml',
+    '.ico':  'image/x-icon',
+    '.woff': 'font/woff',
+    '.woff2':'font/woff2',
+    '.ttf':  'font/ttf',
+    '.webp': 'image/webp',
+  }
+  protocol.handle('app', async (request) => {
     const url = new URL(request.url)
     const rendererDist = path.join(__dirname, '../renderer')
-    // Strip leading slash from pathname, default to index.html
     let filePath = url.pathname.replace(/^\//, '')
     if (!filePath || filePath === 'promptflow/') filePath = 'index.html'
-    // Strip the "promptflow/" prefix used as hostname placeholder
     filePath = filePath.replace(/^promptflow\//, '')
     const fullPath = path.join(rendererDist, filePath)
-    return net.fetch(pathToFileURL(fullPath).toString())
+    try {
+      const data = fs.readFileSync(fullPath)
+      const ext = path.extname(filePath).toLowerCase()
+      const contentType = MIME[ext] ?? 'application/octet-stream'
+      return new Response(data, { headers: { 'Content-Type': contentType } })
+    } catch {
+      return new Response('Not found', { status: 404 })
+    }
   })
 
   createWindow()
