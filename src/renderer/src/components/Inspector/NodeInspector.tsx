@@ -57,7 +57,7 @@ function PortList({ ports, label }: { ports: PortDef[]; label: string }) {
 }
 
 export function NodeInspector() {
-  const { nodes, selectedNodeId, selectNode, updateNodeData, deleteNode } = useFlowStore()
+  const { nodes, edges, selectedNodeId, selectNode, updateNodeData, deleteNode } = useFlowStore()
   const [codeExpanded, setCodeExpanded] = useState(true)
   const [refinePrompt, setRefinePrompt] = useState('')
   const [refining, setRefining] = useState(false)
@@ -92,7 +92,33 @@ export function NodeInspector() {
     setRefining(true)
     setRefineError('')
     try {
-      const context = `Current node: "${data.label}" (${data.kind}). Current description: "${data.description ?? ''}".`
+      // Build a concrete description of what inputs this node will receive
+      const incomingEdges = edges.filter(e => e.target === node.id)
+      let inputsContext = 'No edges connected — inputs will be empty.'
+      if (incomingEdges.length > 0) {
+        const parts = incomingEdges.map(e => {
+          const src = nodes.find(n => n.id === e.source)
+          if (!src) return null
+          const targetHandle = e.targetHandle ?? 'value'
+          const sourceHandle = e.sourceHandle ?? 'result'
+          // Include the last 8 lines of source code so LLM can infer the return shape
+          const codeLines = (src.data.code ?? '').split('\n')
+          const snippet = codeLines.slice(-Math.min(8, codeLines.length)).join('\n').trim()
+          return `inputs.${targetHandle} ← "${src.data.label}" (${src.data.kind}) output "${sourceHandle}"\n  Source returns:\n  ${snippet.replace(/\n/g, '\n  ')}`
+        }).filter(Boolean)
+        inputsContext = parts.join('\n\n')
+      }
+
+      const context = [
+        `Current node: "${data.label}" (${data.kind})`,
+        `Current description: "${data.description ?? ''}"`,
+        ``,
+        `INPUTS THIS NODE WILL RECEIVE AT RUNTIME:`,
+        inputsContext,
+        ``,
+        `Write code that uses EXACTLY these inputs.${targetHandle} keys — do NOT invent other input names.`,
+      ].join('\n')
+
       const userMsg = `${context}\n\nUser request: ${prompt}`
       const res = await window.electronAPI?.callLLM(userMsg, REGEN_SYSTEM_PROMPT)
       if (!res?.success || !res.result) throw new Error(res?.error ?? 'LLM call failed')
