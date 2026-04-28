@@ -18,16 +18,28 @@ Schema:
   "nodeKind": "input" | "function" | "llm" | "decision" | "output",
   "nodeName": "string",
   "description": "string (one sentence description of what the node does)",
-  "code": "string (optional JS code body for function nodes — receives 'inputs' object, set 'result' variable)",
+  "code": "string (complete, self-contained JS code — see rules below)",
   "message": "string (short friendly message to show the user)"
 }
 
 Rules:
 - For "add" actions always include nodeKind, nodeName, description, and message.
-- For function nodes, include simple JS code if the task is straightforward.
 - For "describe" actions summarise the pipeline in the message field.
 - For anything else use action "unknown" and include a helpful suggestion in message.
-- Keep names concise (2–4 words).`
+- Keep names concise (2–4 words).
+
+CODE RULES (critical — violations will cause runtime errors):
+- Code runs inside an async function body in a Node.js VM sandbox.
+- Available globals: Math, JSON, Array, Object, String, Number, Boolean, Set, Map, Date, Promise, RegExp, parseInt, parseFloat, isNaN, isFinite, console, callLLM.
+- NO other globals, libraries, or helper functions exist. Do NOT call functions you have not defined in the code itself.
+- Do NOT use: fetch, require, import, Buffer, process, setTimeout, or any DOM APIs.
+- Do NOT call invented helpers like generateBarChart(), renderTable(), etc. Write the full implementation inline.
+- Inputs come from the "inputs" object (e.g. inputs.text, inputs.value).
+- Set the output by assigning to "result" (e.g. result = 42 or result = { count: 3 }).
+- Use explicit for-loops instead of spread in function calls (e.g. avoid Math.max(...arr); use a loop instead).
+- For visualisations, return { __html: '<svg>...</svg>' } and the output panel will render it.
+- LLM nodes use: result = await callLLM('gpt-4o-mini', prompt)
+- Code must be complete and runnable as-is — no placeholders, no TODO comments.`
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
