@@ -10,6 +10,17 @@ export default defineConfig({
   build: {
     outDir: '../../dist/renderer',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (id.includes('node_modules/@monaco-editor') || id.includes('node_modules/monaco-editor')) return 'vendor-monaco'
+          if (id.includes('node_modules/reactflow') || id.includes('node_modules/@reactflow')) return 'vendor-reactflow'
+          if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/')) return 'vendor-react'
+          if (id.includes('node_modules/lucide-react')) return 'vendor-lucide'
+          if (id.includes('node_modules/zustand')) return 'vendor-zustand'
+        },
+      },
+    },
   },
   resolve: {
     alias: { '@': path.resolve(__dirname, 'src/renderer/src') },
