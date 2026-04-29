@@ -44,7 +44,7 @@ NODE SCHEMA:
 }
 
 NODE KINDS:
-- "input", "function", "llm", "decision", "output", "ui", "mcp", "pipe"
+- "input", "function", "llm", "decision", "output", "ui", "mcp", "pipe", "state"
 
 EDGE SCHEMA:
 { "id": "unique-string", "source": "node-id", "target": "node-id" }
@@ -62,18 +62,24 @@ YOUR BEHAVIOUR:
 
 const ANALYSIS_SYSTEM_PROMPT = `You are a PromptFlow workflow analyst. You will be given a description of a visual node-graph workflow and must analyse it for potential issues.
 
-Note nodes are purely decorative annotations and must NEVER be flagged as disconnected, unfed, or problematic in any way — ignore them completely during analysis.
+SELF-SOURCING NODES — these never have incoming edges by design; do NOT flag them as unfed or disconnected:
+- "ui" nodes: read their value from user input at runtime
+- "input" nodes: entry points that inject data into the pipeline
+- "state" nodes with mode "read": read persisted state at runtime — no incoming edge is correct
+Only "state" nodes with mode "write" should have an incoming edge.
+
+Note nodes are purely decorative annotations — ignore them completely.
 
 Check for:
-1. **Disconnected nodes** — non-note nodes with no incoming or outgoing connections (isolated)
+1. **Disconnected nodes** — non-note nodes with no incoming AND no outgoing connections (truly isolated)
 2. **Incomplete decision branches** — Decision nodes where the true OR false branch has no outgoing connection
-3. **Dead ends** — nodes that produce output but nothing consumes it (except Output nodes, which are intentional sinks)
-4. **Unfed nodes** — LLM, Function, or Pipe nodes that have no incoming connections
+3. **Dead ends** — non-output nodes that produce output but nothing consumes it
+4. **Unfed nodes** — LLM, Function, or Pipe nodes with no incoming connections (excluding self-sourcing kinds above)
 5. **Empty output** — Output nodes with no incoming connections
 6. **Circular dependencies** — cycles in the graph (A→B→C→A)
 7. **Redundant structure** — nodes that seem unnecessary or duplicated
 8. **Logic / semantic issues** — the described flow doesn't clearly accomplish what its labels suggest
-9. **LLM configuration** — prompt templates that appear incomplete, generic, or missing key placeholders
+9. **LLM configuration** — prompt templates that appear incomplete or missing key placeholders (a trailing "…" means the prompt was truncated for preview — do not flag the truncation itself as an issue)
 10. **Data flow mismatches** — transformations that look incorrect or missing between node types
 
 Response format:
@@ -102,7 +108,7 @@ function serializeGraph(nodes: FlowNode[], edges: FlowEdge[]): string {
     if (d.kind === 'decision') extra = ` | branches: ${(d.branches || ['true', 'false']).join(', ')}`
     if (d.kind === 'ui')       extra = ` | uiKind: ${d.uiKind || 'text'}`
     if (d.kind === 'function') extra = ` | code: "${(d.code || '').replace(/\n/g, ' ').slice(0, 80)}"`
-    if (d.kind === 'mcp')      extra = ` | command: ${d.mcpCommand || '(not set)'}`
+    if (d.kind === 'state')    extra = ` | mode: ${d.stateMode || 'read'} | key: "${d.stateKey || '(unset)'}" [self-sourcing: no incoming edges needed for read mode]`
 
     const inCount  = edges.filter(e => e.target === n.id).length
     const outCount = edges.filter(e => e.source === n.id).length
