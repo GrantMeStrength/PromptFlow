@@ -338,10 +338,25 @@ export const useFlowStore = create<FlowState>((set, get) => ({
           runOutput: (result as { __html: string }).__html,
         })
       } else {
+        // Unwrap single-value objects so plain text results don't appear as JSON.
+        // e.g. { result: "hello" } → "hello", { response: "hello" } → "hello"
+        let display: string
+        if (typeof result === 'string') {
+          display = result
+        } else if (result !== null && typeof result === 'object') {
+          const vals = Object.values(result as Record<string, unknown>).filter(v => v !== null && v !== undefined)
+          if (vals.length === 1 && typeof vals[0] === 'string') {
+            display = vals[0]
+          } else {
+            display = JSON.stringify(result, null, 2)
+          }
+        } else {
+          display = String(result ?? '')
+        }
         set((s) => ({
           isRunning: false,
           runOutputIsHtml: false,
-          runOutput: s.runOutput + `✅ Pipeline completed\n\n${JSON.stringify(result, null, 2)}`,
+          runOutput: s.runOutput + `✅ Done\n\n${display}`,
         }))
       }
     } catch (err) {
