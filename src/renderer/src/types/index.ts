@@ -10,7 +10,7 @@ export interface PortDef {
 
 // ─── Node Types ───────────────────────────────────────────────────────────────
 
-export type NodeKind = 'input' | 'function' | 'llm' | 'decision' | 'output' | 'pipe' | 'ui'
+export type NodeKind = 'input' | 'function' | 'llm' | 'decision' | 'output' | 'pipe' | 'ui' | 'mcp'
 
 export interface NodeData {
   label: string
@@ -42,6 +42,18 @@ export interface NodeData {
   uiPlaceholder?: string
   uiAccept?: string
   uiMultiple?: boolean
+  /** For MCP server nodes */
+  mcpTransport?: 'stdio'
+  mcpCommand?: string
+  mcpArgs?: string    // one arg per line
+  mcpEnv?: string     // KEY=value per line
+  mcpTools?: McpToolInfo[]
+}
+
+export interface McpToolInfo {
+  name: string
+  description?: string
+  inputSchema?: object
 }
 
 // ─── ReactFlow Node / Edge wrappers ──────────────────────────────────────────
@@ -83,6 +95,7 @@ export interface ElectronAPI {
   saveSettings: (settings: LLMSettings) => Promise<{ success: boolean }>
   onMenuAction: (callback: (action: string) => void) => () => void
   pickSkillsFile: () => Promise<{ success: boolean; filename?: string; content?: string; error?: string }>
+  testMcpConnection: (config: { command: string; args: string[]; env: Record<string,string> }) => Promise<{ success: boolean; tools?: import('./index').McpToolInfo[]; error?: string }>
 }
 
 declare global {

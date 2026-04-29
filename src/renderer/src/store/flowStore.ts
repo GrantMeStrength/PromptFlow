@@ -72,7 +72,7 @@ const defaultNodeData = (kind: NodeKind): NodeData => {
       outputs: [{ name: 'response', type: 'string' }],
       llmModel: 'gpt-4o',
       llmPromptTemplate: 'Summarize the following text:\\n\\n{{text}}',
-      code: `// Calls the configured LLM (callLLM is injected by the runtime)\nconst text = String(inputs.text ?? inputs.content ?? inputs.value ?? '')\nconst prompt = llmPromptTemplate ? llmPromptTemplate.replace('{{text}}', text) : text\n// llmSystemPrompt is auto-injected by the generator when a skills file is attached\nconst response = await callLLM(llmModel || 'gpt-4o-mini', prompt, typeof llmSystemPrompt !== 'undefined' ? llmSystemPrompt : undefined)\nreturn { response }`,
+      code: `// Calls the configured LLM (callLLM / callLLMWithTools injected by runtime)\nconst text = String(inputs.text ?? inputs.content ?? inputs.value ?? '')\nconst prompt = llmPromptTemplate ? llmPromptTemplate.replace('{{text}}', text) : text\nconst _sys = typeof llmSystemPrompt !== 'undefined' ? llmSystemPrompt : undefined\nconst _mcp = typeof mcpConfigs !== 'undefined' ? mcpConfigs : []\nconst response = _mcp.length > 0\n  ? await callLLMWithTools(llmModel || 'gpt-4o-mini', prompt, _sys, _mcp)\n  : await callLLM(llmModel || 'gpt-4o-mini', prompt, _sys)\nreturn { response }`,
     },
     decision: {
       label: 'Decision',
@@ -108,6 +108,17 @@ const defaultNodeData = (kind: NodeKind): NodeData => {
       uiLabel: 'Enter your text:',
       uiPlaceholder: 'Type here…',
       code: `// Value is collected from the user before the pipeline runs`,
+    },
+    mcp: {
+      label: 'MCP Server',
+      description: 'Connects a tool provider (MCP server) to an LLM node.',
+      inputs: [],
+      outputs: [{ name: 'tools', type: 'any', description: 'Tool definitions' }],
+      mcpTransport: 'stdio',
+      mcpCommand: '',
+      mcpArgs: '',
+      mcpEnv: '',
+      code: `// MCP Server node – provides tools to connected LLM nodes`,
     },
   }
   return {

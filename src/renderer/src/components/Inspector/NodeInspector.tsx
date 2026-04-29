@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import Editor from '@monaco-editor/react'
-import { X, Trash2, ChevronDown, ChevronUp, Zap, RotateCcw, Loader2, ArrowRightLeft, Sparkles, BookMarked, FolderOpen } from 'lucide-react'
+import { X, Trash2, ChevronDown, ChevronUp, Zap, RotateCcw, Loader2, ArrowRightLeft, Sparkles, BookMarked, FolderOpen, Plug, CheckCircle, AlertCircle } from 'lucide-react'
 import { useFlowStore } from '../../store/flowStore'
 import type { NodeKind, PortDef } from '../../types'
 
@@ -64,6 +64,8 @@ export function NodeInspector() {
   const [refinePrompt, setRefinePrompt] = useState('')
   const [refining, setRefining] = useState(false)
   const [refineError, setRefineError] = useState('')
+  const [mcpTesting, setMcpTesting] = useState(false)
+  const [mcpTestResult, setMcpTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const autoTriggered = useRef<string | null>(null)
 
   const node = nodes.find((n) => n.id === selectedNodeId)
@@ -411,8 +413,113 @@ export function NodeInspector() {
           </div>
         )}
 
-        {/* Code (hide for UI nodes — code is generated automatically) */}
-        {data.kind !== 'ui' && (
+        {/* MCP Server Configuration */}
+        {data.kind === 'mcp' && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-teal-500 mb-1">
+              <Plug size={11} />
+              MCP Server Config
+            </div>
+
+            {/* Command */}
+            <div>
+              <label className="block text-[11px] text-slate-400 mb-1">Command</label>
+              <input
+                className="w-full bg-[#0f0f1a] text-slate-200 text-xs rounded-lg px-2.5 py-1.5 border border-[#2a2a3f] focus:border-teal-500 outline-none font-mono"
+                placeholder="e.g. npx"
+                value={data.mcpCommand ?? ''}
+                onChange={(e) => updateNodeData(node.id, { mcpCommand: e.target.value })}
+              />
+            </div>
+
+            {/* Args */}
+            <div>
+              <label className="block text-[11px] text-slate-400 mb-1">Arguments (one per line)</label>
+              <textarea
+                className="w-full bg-[#0f0f1a] text-slate-200 text-xs rounded-lg px-2.5 py-1.5 border border-[#2a2a3f] focus:border-teal-500 outline-none font-mono resize-none"
+                rows={4}
+                placeholder={`-y\n@modelcontextprotocol/server-filesystem\n/Users/john/Documents`}
+                value={data.mcpArgs ?? ''}
+                onChange={(e) => updateNodeData(node.id, { mcpArgs: e.target.value })}
+              />
+            </div>
+
+            {/* Env */}
+            <div>
+              <label className="block text-[11px] text-slate-400 mb-1">Environment variables (KEY=value per line)</label>
+              <textarea
+                className="w-full bg-[#0f0f1a] text-slate-200 text-xs rounded-lg px-2.5 py-1.5 border border-[#2a2a3f] focus:border-teal-500 outline-none font-mono resize-none"
+                rows={3}
+                placeholder="BRAVE_API_KEY=sk-..."
+                value={data.mcpEnv ?? ''}
+                onChange={(e) => updateNodeData(node.id, { mcpEnv: e.target.value })}
+              />
+            </div>
+
+            {/* Test Connection */}
+            <button
+              onClick={async () => {
+                setMcpTesting(true)
+                setMcpTestResult(null)
+                try {
+                  const args = (data.mcpArgs ?? '').split('\n').map(s => s.trim()).filter(Boolean)
+                  const env: Record<string, string> = {}
+                  for (const line of (data.mcpEnv ?? '').split('\n')) {
+                    const idx = line.indexOf('=')
+                    if (idx > 0) env[line.slice(0, idx).trim()] = line.slice(idx + 1).trim()
+                  }
+                  const result = await window.electronAPI.testMcpConnection({
+                    command: data.mcpCommand ?? '',
+                    args,
+                    env,
+                  })
+                  updateNodeData(node.id, { mcpTools: result.tools })
+                  setMcpTestResult({ ok: true, message: `Connected — ${result.tools.length} tool${result.tools.length !== 1 ? 's' : ''} discovered` })
+                } catch (err: unknown) {
+                  const msg = err instanceof Error ? err.message : String(err)
+                  setMcpTestResult({ ok: false, message: msg })
+                } finally {
+                  setMcpTesting(false)
+                }
+              }}
+              disabled={mcpTesting || !data.mcpCommand?.trim()}
+              className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-600 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors w-full justify-center"
+            >
+              {mcpTesting ? (
+                <><Loader2 size={12} className="animate-spin" /> Testing connection…</>
+              ) : (
+                <><Plug size={12} /> Test Connection</>
+              )}
+            </button>
+
+            {mcpTestResult && (
+              <div className={`flex items-start gap-2 text-xs rounded-lg px-3 py-2 ${mcpTestResult.ok ? 'bg-teal-900/40 text-teal-300' : 'bg-red-900/40 text-red-300'}`}>
+                {mcpTestResult.ok ? <CheckCircle size={13} className="mt-0.5 shrink-0" /> : <AlertCircle size={13} className="mt-0.5 shrink-0" />}
+                {mcpTestResult.message}
+              </div>
+            )}
+
+            {/* Tool list */}
+            {(data.mcpTools ?? []).length > 0 && (
+              <div>
+                <div className="text-[11px] text-slate-500 uppercase tracking-widest mb-1.5">Available Tools</div>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                  {(data.mcpTools ?? []).map((tool) => (
+                    <div key={tool.name} className="bg-teal-900/20 border border-teal-800/40 rounded-lg px-2.5 py-2">
+                      <div className="text-xs font-semibold text-teal-300 font-mono">{tool.name}</div>
+                      {tool.description && (
+                        <div className="text-[11px] text-slate-400 mt-0.5">{tool.description}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Code (hide for UI and MCP nodes) */}
+        {data.kind !== 'ui' && data.kind !== 'mcp' && (
         <div>
           <button
             className="flex items-center justify-between w-full text-[11px] uppercase tracking-widest text-slate-500 mb-1.5"
@@ -444,8 +551,8 @@ export function NodeInspector() {
         </div>
         )}
 
-        {/* Prompt / Regenerate (hide for UI nodes) */}
-        {data.kind !== 'ui' && (
+        {/* Prompt / Regenerate (hide for UI and MCP nodes) */}
+        {data.kind !== 'ui' && data.kind !== 'mcp' && (
           <div>
             <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-slate-500 mb-1.5">
               <Zap size={11} />

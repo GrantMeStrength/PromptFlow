@@ -14,6 +14,7 @@ const api: ElectronAPI = {
     return () => ipcRenderer.off('menu-action', handler)
   },
   pickSkillsFile: () => ipcRenderer.invoke('pick-skills-file'),
+  testMcpConnection: (config) => ipcRenderer.invoke('test-mcp-connection', config),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Download, Cpu, Terminal, GitBranch, Upload, Layers, BookOpen, MessageSquare, FileText, ListChecks } from 'lucide-react'
+import { Download, Cpu, Terminal, GitBranch, Upload, Layers, BookOpen, MessageSquare, FileText, ListChecks, Plug } from 'lucide-react'
 import type { NodeKind, NodeData } from '../../types'
 import { useFlowStore } from '../../store/flowStore'
 
@@ -54,6 +54,14 @@ const paletteItems: PaletteItem[] = [
     desc: 'Collect final results',
     color: 'text-rose-400',
     bg: 'bg-rose-900/30 border-rose-700/50 hover:border-rose-500',
+  },
+  {
+    kind: 'mcp',
+    icon: <Plug size={18} />,
+    label: 'MCP Server',
+    desc: 'Provides tools to an LLM via MCP',
+    color: 'text-teal-400',
+    bg: 'bg-teal-900/30 border-teal-700/50 hover:border-teal-500',
   },
 ]
 

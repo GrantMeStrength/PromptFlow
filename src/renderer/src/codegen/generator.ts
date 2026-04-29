@@ -1,16 +1,22 @@
-import type { FlowNode, FlowEdge } from '../types'
+import type { FlowNode, FlowEdge, NodeData } from '../types'
 
 // ─── Topological Sort ─────────────────────────────────────────────────────────
 
 function topoSort(nodes: FlowNode[], edges: FlowEdge[]): FlowNode[] {
+  // MCP nodes are config providers, not pipeline steps — exclude them
+  const execNodes = nodes.filter(n => n.data.kind !== 'mcp')
+  const execIds = new Set(execNodes.map(n => n.id))
+  // Only count edges between exec nodes
+  const execEdges = edges.filter(e => execIds.has(e.source) && execIds.has(e.target))
+
   const inDegree = new Map<string, number>()
   const adj = new Map<string, string[]>()
 
-  for (const n of nodes) {
+  for (const n of execNodes) {
     inDegree.set(n.id, 0)
     adj.set(n.id, [])
   }
-  for (const e of edges) {
+  for (const e of execEdges) {
     adj.get(e.source)?.push(e.target)
     inDegree.set(e.target, (inDegree.get(e.target) ?? 0) + 1)
   }
@@ -31,7 +37,7 @@ function topoSort(nodes: FlowNode[], edges: FlowEdge[]): FlowNode[] {
     }
   }
 
-  const nodeById = new Map(nodes.map((n) => [n.id, n]))
+  const nodeById = new Map(execNodes.map((n) => [n.id, n]))
   return sorted.map((id) => nodeById.get(id)!).filter(Boolean)
 }
 
@@ -49,13 +55,29 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
 
   const sorted = topoSort(nodes, edges)
 
+  // Build node-by-id map (includes mcp nodes for config lookup)
+  const nodeById = new Map(nodes.map(n => [n.id, n]))
+
   // Map: targetNodeId → { targetHandle → { sourceNodeId, sourceHandle } }
+  // Only for edges between exec (non-mcp) nodes
+  const execIds = new Set(sorted.map(n => n.id))
   const inputSources = new Map<string, Map<string, { srcId: string; handle: string }>>()
+  // Separately track which MCP nodes feed into each LLM node
+  const mcpSources = new Map<string, NodeData[]>() // llmNodeId → mcp NodeData[]
+
   for (const e of edges) {
-    if (!inputSources.has(e.target)) inputSources.set(e.target, new Map())
-    inputSources
-      .get(e.target)!
-      .set(e.targetHandle ?? 'value', { srcId: e.source, handle: e.sourceHandle ?? 'result' })
+    const srcNode = nodeById.get(e.source)
+    if (!srcNode) continue
+
+    if (srcNode.data.kind === 'mcp') {
+      // Config edge: wire MCP config into target LLM node
+      if (!mcpSources.has(e.target)) mcpSources.set(e.target, [])
+      mcpSources.get(e.target)!.push(srcNode.data)
+    } else if (execIds.has(e.source) && execIds.has(e.target)) {
+      // Data edge between exec nodes
+      if (!inputSources.has(e.target)) inputSources.set(e.target, new Map())
+      inputSources.get(e.target)!.set(e.targetHandle ?? 'value', { srcId: e.source, handle: e.sourceHandle ?? 'result' })
+    }
   }
 
   const lines: string[] = []
@@ -96,6 +118,21 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
         if (node.data.llmSkillsContent) {
           const skills = node.data.llmSkillsContent.replace(/`/g, '\\`')
           lines.push(`  const llmSystemPrompt = \`${skills}\``)
+        }
+        // Inject MCP configs for any connected MCP Server nodes
+        const mcpList = mcpSources.get(node.id) ?? []
+        if (mcpList.length > 0) {
+          const configs = mcpList.map(d => ({
+            command: d.mcpCommand ?? '',
+            args: (d.mcpArgs ?? '').split('\n').map(s => s.trim()).filter(Boolean),
+            env: Object.fromEntries(
+              (d.mcpEnv ?? '').split('\n')
+                .map(s => s.trim())
+                .filter(s => s.includes('='))
+                .map(s => { const i = s.indexOf('='); return [s.slice(0, i), s.slice(i + 1)] })
+            ),
+          }))
+          lines.push(`  const mcpConfigs = ${JSON.stringify(configs)}`)
         }
       }
       // Indent the node's code
