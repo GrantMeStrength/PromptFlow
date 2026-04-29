@@ -159,16 +159,19 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
           lines.push(`  const mcpConfigs = ${JSON.stringify(configs)}`)
         }
       }
-      // Indent the node's code
+      // Wrap user code in an inner async IIFE so BOTH coding patterns work:
+      //   • return { result: value }  — explicit return, captured as __output
+      //   • result = value            — assignment, returned via fallback
+      //   • result = value; return    — was broken before; now safe (bare return
+      //                                 gives __output = undefined → falls back to result)
       const nodeCode = node.data.code || 'return inputs'
+      lines.push(`  let result`)
+      lines.push(`  const __output = await (async () => {`)
       for (const codeLine of nodeCode.split('\n')) {
-        lines.push(`  ${codeLine}`)
+        lines.push(`    ${codeLine}`)
       }
-      // If code uses `result =` pattern without an explicit `return`, return result automatically
-      const hasExplicitReturn = /^\s*return\s/m.test(nodeCode)
-      if (!hasExplicitReturn) {
-        lines.push(`  return result`)
-      }
+      lines.push(`  })()`)
+      lines.push(`  return __output !== undefined ? __output : result`)
     }
     lines.push(`}`)
     lines.push(``)
