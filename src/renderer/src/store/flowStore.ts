@@ -14,6 +14,10 @@ interface FlowState {
   runOutput: string
   runOutputIsHtml: boolean
   showOutput: boolean
+  /** True when there are unsaved changes */
+  isDirty: boolean
+  /** Filesystem path of the currently open file (library save path) */
+  projectPath: string | null
   /** ID of a newly-created pipe node waiting for LLM auto-generation */
   pendingPipeNodeId: string | null
   /** True when pipeline has UI nodes and is waiting for user input */
@@ -33,8 +37,12 @@ interface FlowState {
 
   // Project I/O
   newProject: () => void
-  loadProject: (project: FlowProject) => void
+  loadProject: (project: FlowProject, savedPath?: string) => void
   getProject: () => FlowProject
+  markSaved: (path: string) => void
+
+  // Wizard
+  applyWizardGraph: (nodes: FlowNode[], edges: FlowEdge[]) => void
 
   // Execution
   runPipeline: () => Promise<void>
@@ -141,6 +149,8 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   runOutput: '',
   runOutputIsHtml: false,
   showOutput: false,
+  isDirty: false,
+  projectPath: null,
   pendingPipeNodeId: null,
   pendingUiRun: false,
   uiNodesInfo: [],
@@ -194,6 +204,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       edges: [...s.edges, edgeIn, edgeOut],
       selectedNodeId: pipeId,
       pendingPipeNodeId: pipeId,
+      isDirty: true,
     }))
   },
 
@@ -203,7 +214,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     const id = `node-${++nodeCounter}`
     const data: NodeData = { ...defaultNodeData(kind), ...extraData }
     const node: FlowNode = { id, type: kind, position, data }
-    set((s) => ({ nodes: [...s.nodes, node] }))
+    set((s) => ({ nodes: [...s.nodes, node], isDirty: true }))
     return node
   },
 
@@ -212,6 +223,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       nodes: s.nodes.map((n) =>
         n.id === id ? { ...n, data: { ...n.data, ...partial } } : n
       ),
+      isDirty: true,
     })),
 
   deleteNode: (id) =>
@@ -219,6 +231,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       nodes: s.nodes.filter((n) => n.id !== id),
       edges: s.edges.filter((e) => e.source !== id && e.target !== id),
       selectedNodeId: s.selectedNodeId === id ? null : s.selectedNodeId,
+      isDirty: true,
     })),
 
   clearPendingPipe: () => set({ pendingPipeNodeId: null }),
@@ -234,15 +247,30 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       nodes: [],
       edges: [],
     }
-    set({ project, nodes: [], edges: [], selectedNodeId: null, runOutput: '' })
+    set({ project, nodes: [], edges: [], selectedNodeId: null, runOutput: '', isDirty: false, projectPath: null })
   },
 
-  loadProject: (project) =>
-    set({ project, nodes: project.nodes, edges: project.edges, selectedNodeId: null, runOutput: '' }),
+  loadProject: (project, savedPath?) =>
+    set({ project, nodes: project.nodes, edges: project.edges, selectedNodeId: null, runOutput: '', isDirty: false, projectPath: savedPath ?? null }),
 
   getProject: () => {
     const { project, nodes, edges } = get()
     return { ...project, nodes, edges, updated: new Date().toISOString() }
+  },
+
+  markSaved: (filePath) => set({ isDirty: false, projectPath: filePath }),
+
+  applyWizardGraph: (newNodes, newEdges) => {
+    set((s) => {
+      const updated = new Date().toISOString()
+      return {
+        nodes: newNodes,
+        edges: newEdges,
+        selectedNodeId: null,
+        isDirty: true,
+        project: { ...s.project, updated },
+      }
+    })
   },
 
   runPipeline: async () => {

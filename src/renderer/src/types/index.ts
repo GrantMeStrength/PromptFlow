@@ -76,12 +76,31 @@ export interface FlowProject {
   edges: FlowEdge[]
 }
 
+// ─── Project Library ──────────────────────────────────────────────────────────
+
+export interface ProjectMeta {
+  path: string
+  id: string
+  name: string
+  description: string
+  created: string
+  updated: string
+  nodeCount: number
+}
+
 // ─── LLM Settings ─────────────────────────────────────────────────────────────
 
 export interface LLMSettings {
   apiKey: string
   baseURL: string
   defaultModel: string
+}
+
+// ─── Chat Message ─────────────────────────────────────────────────────────────
+
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'system'
+  content: string
 }
 
 // ─── IPC API (exposed via preload) ───────────────────────────────────────────
@@ -91,11 +110,18 @@ export interface ElectronAPI {
   loadProject: () => Promise<{ success: boolean; project?: FlowProject; error?: string }>
   runCode: (code: string, input: unknown, uiInputs?: Record<string, unknown>) => Promise<{ success: boolean; result?: unknown; error?: string }>
   callLLM: (prompt: string, systemPrompt?: string) => Promise<{ success: boolean; result?: string; error?: string }>
+  callLLMChat: (messages: ChatMessage[], systemPrompt?: string) => Promise<{ success: boolean; result?: string; error?: string }>
   getSettings: () => Promise<LLMSettings>
   saveSettings: (settings: LLMSettings) => Promise<{ success: boolean }>
   onMenuAction: (callback: (action: string) => void) => () => void
   pickSkillsFile: () => Promise<{ success: boolean; filename?: string; content?: string; error?: string }>
   testMcpConnection: (config: { command: string; args: string[]; env: Record<string,string> }) => Promise<{ success: boolean; tools?: import('./index').McpToolInfo[]; error?: string }>
+  // Library
+  getProjectsDir: () => Promise<string>
+  listProjects: () => Promise<ProjectMeta[]>
+  saveToLibrary: (project: FlowProject) => Promise<{ success: boolean; path?: string; error?: string }>
+  deleteProject: (filePath: string) => Promise<{ success: boolean; error?: string }>
+  openProjectByPath: (filePath: string) => Promise<{ success: boolean; project?: FlowProject; error?: string }>
 }
 
 declare global {

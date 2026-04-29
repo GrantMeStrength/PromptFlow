@@ -415,6 +415,25 @@ ipcMain.handle('call-llm', async (_event, prompt: string, systemPrompt?: string)
   }
 })
 
+ipcMain.handle('call-llm-chat', async (_event, messages: { role: string; content: string }[], systemPrompt?: string) => {
+  try {
+    const settings = loadSettings()
+    const OpenAI = require('openai')
+    const openai = new OpenAI.default({ apiKey: settings.apiKey, baseURL: settings.baseURL || undefined })
+    const builtMessages: { role: string; content: string }[] = []
+    if (systemPrompt) builtMessages.push({ role: 'system', content: systemPrompt })
+    builtMessages.push(...messages)
+    const completion = await openai.chat.completions.create({
+      model: settings.defaultModel || 'gpt-4o',
+      messages: builtMessages,
+    })
+    const result = completion.choices[0]?.message?.content ?? ''
+    return { success: true, result }
+  } catch (err) {
+    return { success: false, error: (err as Error).message }
+  }
+})
+
 ipcMain.handle('pick-skills-file', async () => {
   try {
     const { filePaths, canceled } = await dialog.showOpenDialog({
@@ -482,6 +501,92 @@ ipcMain.handle('run-code', async (_event, code: string, input: unknown, uiInputs
     const promise = script.runInContext(context) as Promise<unknown>
     sandbox.result = await promise
     return { success: true, result: sandbox.result }
+  } catch (err) {
+    return { success: false, error: (err as Error).message }
+  }
+})
+
+// ─── Project Library IPC ─────────────────────────────────────────────────────
+
+function getProjectsDir(): string {
+  const dir = path.join(app.getPath('documents'), 'PromptFlow')
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+function isPathSafe(filePath: string): boolean {
+  const base = path.resolve(getProjectsDir())
+  const target = path.resolve(filePath)
+  const rel = path.relative(base, target)
+  return !rel.startsWith('..') && !path.isAbsolute(rel) && target.endsWith('.promptflow')
+}
+
+ipcMain.handle('get-projects-dir', () => getProjectsDir())
+
+ipcMain.handle('list-projects', async () => {
+  const dir = getProjectsDir()
+  let files: string[]
+  try {
+    files = await fs.promises.readdir(dir)
+  } catch {
+    return []
+  }
+  const results = await Promise.all(
+    files
+      .filter(f => f.endsWith('.promptflow'))
+      .map(async (f) => {
+        const filePath = path.join(dir, f)
+        try {
+          const raw = await fs.promises.readFile(filePath, 'utf-8')
+          const p = JSON.parse(raw)
+          return {
+            path: filePath,
+            id: p.id ?? f,
+            name: p.name ?? f,
+            description: p.description ?? '',
+            created: p.created ?? '',
+            updated: p.updated ?? '',
+            nodeCount: Array.isArray(p.nodes) ? p.nodes.length : 0,
+          }
+        } catch {
+          return null
+        }
+      })
+  )
+  return results
+    .filter(Boolean)
+    .sort((a, b) => (b!.updated > a!.updated ? 1 : -1))
+})
+
+ipcMain.handle('save-to-library', async (_event, project: { id: string; name: string; [key: string]: unknown }) => {
+  try {
+    const dir = getProjectsDir()
+    const fileName = `${project.id}.promptflow`
+    const filePath = path.join(dir, fileName)
+    const updated = { ...project, updated: new Date().toISOString() }
+    await fs.promises.writeFile(filePath, JSON.stringify(updated, null, 2), 'utf-8')
+    return { success: true, path: filePath }
+  } catch (err) {
+    return { success: false, error: (err as Error).message }
+  }
+})
+
+ipcMain.handle('delete-project', async (_event, filePath: string) => {
+  try {
+    if (!isPathSafe(filePath)) return { success: false, error: 'Invalid path' }
+    await fs.promises.unlink(filePath)
+    return { success: true }
+  } catch (err) {
+    return { success: false, error: (err as Error).message }
+  }
+})
+
+ipcMain.handle('open-project-by-path', async (_event, filePath: string) => {
+  try {
+    if (!isPathSafe(filePath)) return { success: false, error: 'Invalid path' }
+    const raw = await fs.promises.readFile(filePath, 'utf-8')
+    const project = JSON.parse(raw)
+    return { success: true, project }
   } catch (err) {
     return { success: false, error: (err as Error).message }
   }

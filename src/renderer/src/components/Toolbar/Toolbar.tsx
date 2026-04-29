@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import {
   Play, Square, FilePlus, FolderOpen, Save, Code2,
   Loader2, ChevronDown, ChevronUp, Settings, BookOpen,
+  Library, Sparkles,
 } from 'lucide-react'
 import { useFlowStore } from '../../store/flowStore'
 import { demoProject } from '../../demo/documentAnalysis'
@@ -39,12 +40,15 @@ interface ToolbarProps {
   showCode: boolean
   onToggleCode: () => void
   onOpenSettings: () => void
+  onOpenLibrary: () => void
+  onOpenWizard: () => void
 }
 
-export function Toolbar({ showOutput, onToggleOutput, showCode, onToggleCode, onOpenSettings }: ToolbarProps) {
-  const { project, isRunning, runPipeline, newProject, loadProject, getProject, getGeneratedCode } =
+export function Toolbar({ showOutput, onToggleOutput, showCode, onToggleCode, onOpenSettings, onOpenLibrary, onOpenWizard }: ToolbarProps) {
+  const { project, isRunning, runPipeline, newProject, loadProject, getProject, getGeneratedCode, isDirty, markSaved } =
     useFlowStore()
   const [saving, setSaving] = useState(false)
+  const [savingLib, setSavingLib] = useState(false)
   const [showExamples, setShowExamples] = useState(false)
   const examplesRef = useRef<HTMLDivElement>(null)
 
@@ -90,6 +94,19 @@ export function Toolbar({ showOutput, onToggleOutput, showCode, onToggleCode, on
     if (!res.success) alert(`Save failed: ${res.error}`)
   }
 
+  const handleSaveToLibrary = async () => {
+    const api = window.electronAPI
+    if (!api) return
+    setSavingLib(true)
+    const res = await api.saveToLibrary(getProject())
+    setSavingLib(false)
+    if (res.success && res.path) {
+      markSaved(res.path)
+    } else {
+      alert(`Save failed: ${res.error}`)
+    }
+  }
+
   const handleViewCode = () => {
     if (!showCode) {
       console.log('=== Generated Code ===\n', getGeneratedCode())
@@ -108,37 +125,46 @@ export function Toolbar({ showOutput, onToggleOutput, showCode, onToggleCode, on
         <span className="text-white font-semibold text-sm tracking-tight">PromptFlow</span>
       </div>
 
-      {/* Project name */}
-      <div className="text-slate-400 text-xs truncate max-w-[180px]">{project.name}</div>
+      {/* Project name + dirty indicator */}
+      <div className="flex items-center gap-1 text-slate-400 text-xs max-w-[200px]">
+        {isDirty && <span className="text-amber-400 text-[10px]" title="Unsaved changes">●</span>}
+        <span className="truncate">{project.name}</span>
+      </div>
 
       <div className="flex-1" />
 
       {/* File actions */}
-      <button
-        onClick={handleNew}
-        className="toolbar-btn"
-        title="New project"
-      >
+      <button onClick={handleNew} className="toolbar-btn" title="New project">
         <FilePlus size={15} />
         <span>New</span>
       </button>
-      <button
-        onClick={handleOpen}
-        className="toolbar-btn"
-        title="Open project"
-      >
+      <button onClick={handleOpen} className="toolbar-btn" title="Open project">
         <FolderOpen size={15} />
         <span>Open</span>
       </button>
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="toolbar-btn"
-        title="Save project"
-      >
+      <button onClick={handleSave} disabled={saving} className="toolbar-btn" title="Save project">
         {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
         <span>Save</span>
       </button>
+
+      {/* Library */}
+      <button onClick={onOpenLibrary} className="toolbar-btn" title="Project library">
+        <Library size={15} />
+        <span>Library</span>
+      </button>
+
+      {/* Save to Library quick-button (only shows when there are unsaved changes) */}
+      {isDirty && window.electronAPI && (
+        <button
+          onClick={handleSaveToLibrary}
+          disabled={savingLib}
+          className="toolbar-btn text-amber-300"
+          title="Save to library"
+        >
+          {savingLib ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+          <span>Save to Library</span>
+        </button>
+      )}
 
       {/* Examples dropdown */}
       <div ref={examplesRef} className="no-drag relative">
@@ -177,6 +203,12 @@ export function Toolbar({ showOutput, onToggleOutput, showCode, onToggleCode, on
 
       <div className="w-px h-5 bg-[#2a2a3f] mx-1" />
 
+      {/* Wizard */}
+      <button onClick={onOpenWizard} className="toolbar-btn text-purple-300" title="Workflow Wizard">
+        <Sparkles size={15} />
+        <span>Wizard</span>
+      </button>
+
       {/* Code view */}
       <button
         onClick={handleViewCode}
@@ -199,11 +231,7 @@ export function Toolbar({ showOutput, onToggleOutput, showCode, onToggleCode, on
       </button>
 
       {/* Settings */}
-      <button
-        onClick={onOpenSettings}
-        className="toolbar-btn"
-        title="Settings (API key, model)"
-      >
+      <button onClick={onOpenSettings} className="toolbar-btn" title="Settings (API key, model)">
         <Settings size={15} />
         <span>Settings</span>
       </button>

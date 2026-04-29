@@ -8,12 +8,16 @@ import { OutputPanel } from './components/Canvas/OutputPanel'
 import { CodeViewer } from './components/Canvas/CodeViewer'
 import { SettingsModal } from './components/Settings/SettingsModal'
 import UIInputModal from './components/UIInputModal/UIInputModal'
+import { LibraryModal } from './components/Library/LibraryModal'
+import { WizardPanel } from './components/Wizard/WizardPanel'
 import { useFlowStore } from './store/flowStore'
 
 export default function App() {
   const { showOutput, toggleOutput } = useFlowStore()
   const [showCode, setShowCode] = React.useState(false)
   const [showSettings, setShowSettings] = React.useState(false)
+  const [showLibrary, setShowLibrary] = React.useState(false)
+  const [showWizard, setShowWizard] = React.useState(false)
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#0f0f1a] text-white overflow-hidden">
@@ -23,6 +27,8 @@ export default function App() {
         showCode={showCode}
         onToggleCode={() => setShowCode((v) => !v)}
         onOpenSettings={() => setShowSettings(true)}
+        onOpenLibrary={() => setShowLibrary(true)}
+        onOpenWizard={() => setShowWizard((v) => !v)}
       />
 
       {/* Main workspace */}
@@ -43,6 +49,8 @@ export default function App() {
 
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       <UIInputModal />
+      {showLibrary && <LibraryModal onClose={() => setShowLibrary(false)} />}
+      {showWizard && <WizardPanel onClose={() => setShowWizard(false)} />}
     </div>
   )
 }
