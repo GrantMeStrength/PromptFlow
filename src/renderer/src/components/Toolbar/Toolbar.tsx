@@ -228,12 +228,12 @@ export function Toolbar({ showOutput, onToggleOutput, showCode, onToggleCode, on
         <span>Library</span>
       </button>
 
-      {/* Save to Library quick-button (only shows when there are unsaved changes) */}
-      {isDirty && window.electronAPI && (
+      {/* Save to Library — always visible in Electron; amber when unsaved changes */}
+      {window.electronAPI && (
         <button
           onClick={handleSaveToLibrary}
           disabled={savingLib}
-          className="toolbar-btn text-amber-300"
+          className={`toolbar-btn ${isDirty ? 'text-amber-300' : ''}`}
           title="Save project to Library (~/Documents/PromptFlow)"
         >
           {savingLib ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
