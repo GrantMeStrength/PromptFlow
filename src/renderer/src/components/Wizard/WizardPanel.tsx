@@ -71,10 +71,10 @@ Only "state" nodes with mode "write" should have an incoming edge.
 Note nodes are purely decorative annotations — ignore them completely.
 
 Check for:
-1. **Disconnected nodes** — non-note nodes with no incoming AND no outgoing connections (truly isolated)
+1. **Disconnected nodes** — use the CONNECTIVITY SUMMARY "Isolated nodes" list; do not re-derive from the graph
 2. **Incomplete decision branches** — Decision nodes where the true OR false branch has no outgoing connection
 3. **Dead ends** — non-output nodes that produce output but nothing consumes it
-4. **Unfed nodes** — LLM, Function, or Pipe nodes with no incoming connections (excluding self-sourcing kinds above)
+4. **Unfed nodes** — use the CONNECTIVITY SUMMARY "Genuinely unfed" list; do not re-derive from the graph
 5. **Empty output** — Output nodes with no incoming connections
 6. **Circular dependencies** — cycles in the graph (A→B→C→A)
 7. **Redundant structure** — nodes that seem unnecessary or duplicated
@@ -124,6 +124,26 @@ function serializeGraph(nodes: FlowNode[], edges: FlowEdge[]): string {
     const th = e.targetHandle ? `.${e.targetHandle}` : ''
     lines.push(`  "${src?.data.label ?? e.source}"${sh}  →  "${tgt?.data.label ?? e.target}"${th}`)
   }
+
+  // Pre-compute connectivity facts so the LLM does not re-derive them incorrectly
+  const selfSourcingKinds = new Set(['ui', 'input'])
+  const isSelfSourced = (n: FlowNode) =>
+    selfSourcingKinds.has(n.data.kind) || (n.data.kind === 'state' && (n.data.stateMode ?? 'read') === 'read')
+
+  const unfedNodes = nonNoteNodes.filter(n =>
+    !isSelfSourced(n) && edges.filter(e => e.target === n.id).length === 0
+  )
+  const isolatedNodes = nonNoteNodes.filter(n =>
+    edges.filter(e => e.target === n.id || e.source === n.id).length === 0
+  )
+
+  lines.push('', 'CONNECTIVITY SUMMARY (pre-computed — use these facts directly, do not re-derive):')
+  lines.push(`  Genuinely unfed non-self-sourcing nodes: ${
+    unfedNodes.length ? unfedNodes.map(n => `"${n.data.label}" (${n.data.kind})`).join(', ') : 'none'
+  }`)
+  lines.push(`  Isolated nodes (zero connections): ${
+    isolatedNodes.length ? isolatedNodes.map(n => `"${n.data.label}"`).join(', ') : 'none'
+  }`)
 
   return lines.join('\n')
 }
