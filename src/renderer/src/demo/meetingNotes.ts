@@ -145,6 +145,21 @@ return {
         prompt: 'Output the complete meeting report',
       },
     },
+    {
+      id: 'note-two-llms',
+      type: 'note',
+      position: { x: 380, y: 580 },
+      data: {
+        label: 'Two LLMs, one input',
+        kind: 'note',
+        description: '',
+        inputs: [],
+        outputs: [],
+        code: '',
+        prompt: '',
+        noteText: 'Both LLM nodes receive the same meeting notes but have different system prompts and goals. "Extract Action Items" identifies concrete next steps and owners, while "Executive Summary" writes a concise narrative. Splitting responsibilities across specialised LLM nodes usually gives sharper results than asking one node to do everything.',
+      },
+    },
   ],
   edges: [
     {

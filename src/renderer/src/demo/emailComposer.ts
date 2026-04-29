@@ -132,6 +132,21 @@ return {
         prompt: 'Output the finished email with its metadata',
       },
     },
+    {
+      id: 'note-metadata',
+      type: 'note',
+      position: { x: 700, y: 380 },
+      data: {
+        label: 'What the Metadata node adds',
+        kind: 'note',
+        description: '',
+        inputs: [],
+        outputs: [],
+        code: '',
+        prompt: '',
+        noteText: 'The "Add Metadata" function node doesn\'t change the email text — it wraps it with useful extras: word count, estimated reading time (at 200 wpm), and a timestamp. This pattern is useful any time you want to attach computed properties to an LLM result before passing it downstream.',
+      },
+    },
   ],
   edges: [
     {

@@ -171,6 +171,21 @@ return { review }`,
         prompt: 'Output the code review report with stats and LLM review text',
       },
     },
+    {
+      id: 'note-focus',
+      type: 'note',
+      position: { x: 80, y: 500 },
+      data: {
+        label: 'Review Focus',
+        kind: 'note',
+        description: '',
+        inputs: [],
+        outputs: [],
+        code: '',
+        prompt: '',
+        noteText: 'The "Review Focus" input shapes what the LLM pays attention to — try "security vulnerabilities", "performance", "readability", or "test coverage". The Parse Code Stats node runs independently of the LLM, counting lines, functions, and imports directly from the source text.',
+      },
+    },
   ],
   edges: [
     {

@@ -136,6 +136,21 @@ return { summary }`,
         prompt: 'Create an output node that assembles a final analysis report from summary, keywords and stats',
       },
     },
+    {
+      id: 'note-parallel',
+      type: 'note',
+      position: { x: 300, y: 480 },
+      data: {
+        label: 'Parallel processing',
+        kind: 'note',
+        description: '',
+        inputs: [],
+        outputs: [],
+        code: '',
+        prompt: '',
+        noteText: 'The document text fans out to three nodes at once: Extract Keywords (function), Word Count (function), and Summarize (LLM). The function nodes run instantly without an API call, while the LLM call runs concurrently. All three results then converge at the Analysis Report output node.',
+      },
+    },
   ],
   edges: [
     {
