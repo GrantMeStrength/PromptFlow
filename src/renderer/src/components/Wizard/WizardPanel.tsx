@@ -94,7 +94,11 @@ function serializeGraph(nodes: FlowNode[], edges: FlowEdge[]): string {
   for (const n of nonNoteNodes) {
     const d = n.data
     let extra = ''
-    if (d.kind === 'llm')      extra = ` | model: ${d.llmModel || 'default'} | prompt: "${(d.llmPromptTemplate || '').slice(0, 80)}"`
+    if (d.kind === 'llm') {
+      const prompt = d.llmPromptTemplate || ''
+      const preview = prompt.length > 120 ? prompt.slice(0, 120).replace(/\n/g, ' ') + '…' : prompt.replace(/\n/g, ' ')
+      extra = ` | model: ${d.llmModel || 'default'} | prompt: "${preview}"`
+    }
     if (d.kind === 'decision') extra = ` | branches: ${(d.branches || ['true', 'false']).join(', ')}`
     if (d.kind === 'ui')       extra = ` | uiKind: ${d.uiKind || 'text'}`
     if (d.kind === 'function') extra = ` | code: "${(d.code || '').replace(/\n/g, ' ').slice(0, 80)}"`
@@ -280,7 +284,7 @@ export function WizardPanel({ onClose }: WizardPanelProps) {
                   ? 'bg-indigo-600 text-white'
                   : 'bg-[#1a1a2e] text-slate-200 border border-[#2a2a3f]'
               }`}>
-                {m.content}
+                {m.role === 'assistant' ? renderMarkdown(m.content) : m.content}
               </div>
             </div>
           ))}
