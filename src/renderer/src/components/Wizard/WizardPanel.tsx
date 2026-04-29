@@ -197,7 +197,12 @@ export function WizardPanel({ onClose }: WizardPanelProps) {
 
   const handleApply = () => {
     if (!pendingGraph) return
-    if (nodes.length > 0 && !confirm('This will replace the current canvas. Continue?')) return
+    const nodeCount = pendingGraph.nodes.length
+    const edgeCount = pendingGraph.edges.length
+    const msg = nodes.length > 0
+      ? `Replace current canvas with ${nodeCount} node${nodeCount !== 1 ? 's' : ''} and ${edgeCount} connection${edgeCount !== 1 ? 's' : ''}?`
+      : null
+    if (msg && !confirm(msg)) return
     applyWizardGraph(pendingGraph.nodes, pendingGraph.edges)
     onClose()
   }

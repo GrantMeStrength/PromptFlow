@@ -50,7 +50,16 @@ export function FlowCanvas() {
   const handlePaneClick = useCallback(() => selectNode(null), [selectNode])
 
   return (
-    <div className="flex-1 h-full bg-[#0f0f1a] canvas-texture">
+    <div className="flex-1 h-full bg-[#0f0f1a] canvas-texture relative">
+      {nodes.length === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+          <div className="text-center select-none">
+            <div className="text-6xl mb-4 opacity-20">⬡</div>
+            <p className="text-slate-500 text-sm font-medium opacity-60">Canvas is empty</p>
+            <p className="text-slate-600 text-xs mt-1 opacity-50">Drag nodes from the left panel, load a demo, or describe a workflow below</p>
+          </div>
+        </div>
+      )}
       <ReactFlow
         nodes={nodes}
         edges={edges}

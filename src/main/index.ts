@@ -419,6 +419,7 @@ ipcMain.handle('call-llm', async (_event, prompt: string, systemPrompt?: string)
 ipcMain.handle('call-llm-chat', async (_event, messages: { role: string; content: string }[], systemPrompt?: string) => {
   try {
     const settings = loadSettings()
+    if (!settings.apiKey) throw new Error('No API key configured — open Settings (⚙) to add one.')
     const baseURL = (settings.baseURL || 'https://api.openai.com/v1').replace(/\/$/, '')
     const builtMessages: { role: string; content: string }[] = []
     if (systemPrompt) builtMessages.push({ role: 'system', content: systemPrompt })
@@ -428,7 +429,13 @@ ipcMain.handle('call-llm-chat', async (_event, messages: { role: string; content
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${settings.apiKey}` },
       body: JSON.stringify({ model: settings.defaultModel || 'gpt-4o', messages: builtMessages }),
     })
-    if (!resp.ok) throw new Error(`API error ${resp.status}: ${await resp.text()}`)
+    if (!resp.ok) {
+      const text = await resp.text()
+      let hint = ''
+      if (resp.status === 401) hint = ' — check your API key in Settings (⚙)'
+      if (resp.status === 429) hint = ' — rate limit hit, try again in a moment'
+      throw new Error(`API error ${resp.status}${hint}: ${text}`)
+    }
     const data = await resp.json() as { choices: { message: { content: string } }[] }
     const result = data.choices[0]?.message?.content ?? ''
     return { success: true, result }

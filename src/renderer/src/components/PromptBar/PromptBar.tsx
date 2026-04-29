@@ -149,6 +149,14 @@ export function PromptBar() {
       {/* Command history */}
       {history.length > 0 && (
         <div className="max-h-28 overflow-y-auto px-4 py-2 space-y-1 border-b border-[#2a2a3f]">
+          <div className="flex justify-end mb-1">
+            <button
+              onClick={() => { setHistory([]); setPendingContext(null) }}
+              className="text-[10px] text-slate-600 hover:text-slate-400 transition-colors"
+            >
+              Clear
+            </button>
+          </div>
           {history.slice(-6).map((line, i) => (
             <pre key={i} className="text-xs text-slate-400 whitespace-pre-wrap leading-relaxed font-mono">
               {line}

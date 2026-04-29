@@ -83,7 +83,11 @@ export function OutputPanel({ onClose }: OutputPanelProps) {
           />
         ) : (
           <div className="p-3">
-            <pre className="text-xs text-green-300 whitespace-pre-wrap leading-relaxed">{runOutput}</pre>
+            <pre className="text-xs text-green-300 whitespace-pre-wrap leading-relaxed">
+              {runOutput.length > 50000
+                ? runOutput.slice(0, 50000) + '\n\n[… output truncated — use HTML export for full results]'
+                : runOutput}
+            </pre>
           </div>
         )}
       </div>

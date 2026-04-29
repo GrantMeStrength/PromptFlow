@@ -309,7 +309,14 @@ export const useFlowStore = create<FlowState>((set, get) => ({
 
   _executePipeline: async (uiInputs: Record<string, unknown>) => {
     const { nodes, edges, updateNodeData } = get()
-    set({ isRunning: true, runOutput: '▶ Running pipeline...\n', showOutput: true })
+
+    const connectedIds = new Set(edges.flatMap((e) => [e.source, e.target]))
+    const isolated = nodes.filter((n) => n.data.kind !== 'note' && !connectedIds.has(n.id))
+    const warningPrefix = isolated.length > 0
+      ? `⚠ ${isolated.length} unconnected node${isolated.length !== 1 ? 's' : ''} will be skipped: ${isolated.map((n) => n.data.label).join(', ')}\n\n`
+      : ''
+
+    set({ isRunning: true, runOutput: warningPrefix + '▶ Running pipeline...\n', showOutput: true })
 
     try {
       const code = generateCode(nodes, edges)

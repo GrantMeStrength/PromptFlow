@@ -160,11 +160,23 @@ export function NodeInspector() {
   if (!node) {
     return (
       <aside className="w-72 bg-[#13131f] border-l border-[#2a2a3f] flex flex-col items-center justify-center p-6 text-center">
-        <div className="text-4xl mb-3 opacity-30">⬡</div>
-        <p className="text-slate-500 text-sm">Click a node to inspect it</p>
-        <p className="text-slate-600 text-xs mt-1">
-          Drag from the palette to add nodes
+        <div className="text-4xl mb-3 opacity-20">⬡</div>
+        <p className="text-slate-400 text-sm font-medium">Node Inspector</p>
+        <p className="text-slate-600 text-xs mt-2 leading-relaxed">
+          Click any node to view and edit its properties, code, and connections.
         </p>
+        <div className="mt-4 space-y-1.5 text-left w-full">
+          {[
+            ['⬡', 'Drag nodes from the palette'],
+            ['⚡', 'Connect nodes by dragging handles'],
+            ['▶', 'Press Run to execute the pipeline'],
+          ].map(([icon, tip]) => (
+            <div key={tip} className="flex items-start gap-2 text-[11px] text-slate-600">
+              <span className="opacity-50 shrink-0">{icon}</span>
+              <span>{tip}</span>
+            </div>
+          ))}
+        </div>
       </aside>
     )
   }
