@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { X, Sparkles, Send, Loader2, AlertCircle, CheckCircle2, ScanSearch } from 'lucide-react'
 import type { FlowNode, FlowEdge, NodeKind } from '../../types'
 import { useFlowStore } from '../../store/flowStore'
+import wizardImg from '../../assets/wizard.png'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -225,12 +226,16 @@ export function WizardPanel({ onClose }: WizardPanelProps) {
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.length === 0 && (
-            <div className="text-slate-500 text-sm text-center pt-8 space-y-2">
-              <Sparkles size={28} className="mx-auto text-purple-500/50" />
-              <p className="font-medium text-slate-400">Describe a workflow</p>
-              <p className="text-[12px]">I'll ask a few questions, then generate a graph you can apply to the canvas.</p>
+            <div className="text-slate-500 text-sm text-center space-y-3 flex flex-col items-center">
+              <img
+                src={wizardImg}
+                alt="Wizard"
+                className="w-48 object-contain drop-shadow-[0_8px_24px_rgba(99,60,220,0.35)]"
+              />
+              <p className="font-medium text-slate-300 text-base">Describe a workflow</p>
+              <p className="text-[12px] text-slate-500 max-w-[280px] leading-relaxed">I'll ask a few questions, then generate a graph you can apply to the canvas.</p>
               {hasCanvas && (
-                <p className="text-[12px] text-amber-500/70 mt-3">
+                <p className="text-[12px] text-amber-500/70 pt-1">
                   Or click <strong className="text-amber-400">Analyse</strong> above to review the current graph for issues.
                 </p>
               )}
