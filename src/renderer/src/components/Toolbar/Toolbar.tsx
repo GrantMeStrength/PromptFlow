@@ -9,6 +9,8 @@ import { demoProject } from '../../demo/documentAnalysis'
 import { emailComposerProject } from '../../demo/emailComposer'
 import { codeReviewProject } from '../../demo/codeReview'
 import { meetingNotesProject } from '../../demo/meetingNotes'
+import { dataMapperProject } from '../../demo/dataMapper'
+import { barChartProject } from '../../demo/barChart'
 import type { FlowProject } from '../../types'
 
 const EXAMPLES: { label: string; description: string; project: FlowProject }[] = [
@@ -31,6 +33,16 @@ const EXAMPLES: { label: string; description: string; project: FlowProject }[] =
     label: 'Meeting Notes',
     description: 'Parallel LLMs → actions + summary',
     project: meetingNotesProject,
+  },
+  {
+    label: 'Batch Data Mapper',
+    description: 'List input → LLM enriches each item → table',
+    project: dataMapperProject,
+  },
+  {
+    label: 'Survey Bar Chart',
+    description: 'Topic + options → LLM data → HTML chart',
+    project: barChartProject,
   },
 ]
 
