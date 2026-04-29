@@ -32,7 +32,7 @@ export const meetingNotesProject: FlowProject = {
         outputs: [],
         code: '',
         prompt: '',
-        noteText: 'Paste raw meeting notes and get two outputs simultaneously: a bullet-point action item list (with owners and deadlines) and a concise executive summary. Two specialised LLM nodes run in parallel with different prompts, then a formatting node combines their results into a clean document.',
+        noteText: 'Paste raw meeting notes and get two outputs simultaneously: a bullet-point action item list (with owners and deadlines) and a concise executive summary. Two specialised LLM nodes run in parallel, then a function merges the results. State nodes track how many meetings you have processed — run it multiple times and watch the session counter increment as history accumulates.',
       },
     },
     {
@@ -104,6 +104,23 @@ return { summary }`,
       },
     },
     {
+      id: 'state-read-history',
+      type: 'state',
+      position: { x: 700, y: 60 },
+      data: {
+        label: 'Meeting History',
+        kind: 'state',
+        description: 'Reads the accumulated list of previous meetings processed through this pipeline.',
+        inputs: [],
+        outputs: [{ name: 'value', type: 'array', description: 'Array of previous meeting summaries' }],
+        stateKey: 'meetingHistory',
+        stateDefault: '[]',
+        stateMode: 'read',
+        code: '',
+        prompt: '',
+      },
+    },
+    {
       id: 'fn-report',
       type: 'function',
       position: { x: 700, y: 260 },
@@ -111,53 +128,84 @@ return { summary }`,
         label: 'Build Report',
         kind: 'function',
         description:
-          'Merges the action items and executive summary into a structured report object. Also counts the number of action items for the header.',
+          'Merges action items and executive summary into a report. Reads accumulated meeting history to compute the session number, then appends this meeting for future runs.',
         inputs: [
           { name: 'actions', type: 'string', description: 'Numbered action items list' },
           { name: 'summary', type: 'string', description: 'Executive summary' },
+          { name: 'history', type: 'array', description: 'Previous meeting history (from state)' },
         ],
         outputs: [
           { name: 'summary', type: 'string', description: 'Executive summary' },
           { name: 'actions', type: 'string', description: 'Action items list' },
           { name: 'actionCount', type: 'number', description: 'Number of action items' },
+          { name: 'sessionNumber', type: 'number', description: 'Which meeting session this is' },
+          { name: 'updatedHistory', type: 'array', description: 'History array with this meeting appended' },
           { name: 'generatedAt', type: 'string', description: 'Timestamp' },
         ],
         code: `const actions = String(inputs.actions ?? '')
 const summary = String(inputs.summary ?? '')
+const history = Array.isArray(inputs.history) ? inputs.history : []
 // Count non-empty lines that start with a digit (numbered list items)
 const actionCount = actions.split('\\n').filter(l => /^\\d+\\./.test(l.trim())).length
+const sessionNumber = history.length + 1
+const updatedHistory = [...history, {
+  date: new Date().toISOString(),
+  actionCount,
+  summary: summary.slice(0, 150),
+}]
 return {
   summary,
   actions,
   actionCount,
+  sessionNumber,
+  updatedHistory,
   generatedAt: new Date().toISOString(),
 }`,
-        prompt: 'Merge action items and executive summary into a structured report with a count of action items',
+        prompt: 'Merge action items and summary into a report, tracking session number from accumulated meeting history',
+      },
+    },
+    {
+      id: 'state-write-history',
+      type: 'state',
+      position: { x: 980, y: 80 },
+      data: {
+        label: 'Save History',
+        kind: 'state',
+        description: 'Persists the updated meeting history so the next run knows how many meetings have been processed.',
+        inputs: [{ name: 'value', type: 'array', description: 'Updated meeting history array' }],
+        outputs: [{ name: 'value', type: 'array', description: 'Stored value (pass-through)' }],
+        stateKey: 'meetingHistory',
+        stateDefault: '[]',
+        stateMode: 'write',
+        code: '',
+        prompt: '',
       },
     },
     {
       id: 'output-report',
       type: 'output',
-      position: { x: 980, y: 260 },
+      position: { x: 1280, y: 260 },
       data: {
         label: 'Meeting Report',
         kind: 'output',
         description:
-          'Final structured report containing the executive summary, action items, count, and generation timestamp. Ready to be displayed or emailed.',
+          'Final structured report with executive summary, action items, session number, and generation timestamp.',
         inputs: [
           { name: 'summary', type: 'string', description: 'Executive summary' },
           { name: 'actions', type: 'string', description: 'Action items' },
           { name: 'actionCount', type: 'number', description: 'Count' },
+          { name: 'sessionNumber', type: 'number', description: 'Meeting session number' },
           { name: 'generatedAt', type: 'string', description: 'Timestamp' },
         ],
         outputs: [],
         code: `return {
+  session: \`Meeting #\${inputs.sessionNumber}\`,
   summary: inputs.summary,
   actionItems: inputs.actions,
   actionCount: inputs.actionCount,
   generatedAt: inputs.generatedAt,
 }`,
-        prompt: 'Output the complete meeting report',
+        prompt: 'Output the complete meeting report with session number',
       },
     },
     {
@@ -210,6 +258,22 @@ return {
       animated: true,
     },
     {
+      id: 'e-history-report',
+      source: 'state-read-history',
+      target: 'fn-report',
+      sourceHandle: 'value',
+      targetHandle: 'history',
+      animated: true,
+    },
+    {
+      id: 'e-report-save-history',
+      source: 'fn-report',
+      target: 'state-write-history',
+      sourceHandle: 'updatedHistory',
+      targetHandle: 'value',
+      animated: true,
+    },
+    {
       id: 'e-report-out-summary',
       source: 'fn-report',
       target: 'output-report',
@@ -231,6 +295,14 @@ return {
       target: 'output-report',
       sourceHandle: 'actionCount',
       targetHandle: 'actionCount',
+      animated: true,
+    },
+    {
+      id: 'e-report-out-session',
+      source: 'fn-report',
+      target: 'output-report',
+      sourceHandle: 'sessionNumber',
+      targetHandle: 'sessionNumber',
       animated: true,
     },
     {

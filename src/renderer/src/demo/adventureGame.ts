@@ -248,7 +248,7 @@ const msg = String(inputs.message ?? '').trim()
 const s = SCENES[loc] || SCENES.beach
 
 const header = msg ? \`⚠️  \${msg}\\n\\n\` : ''
-result = {
+return {
   scene: \`\${header}\${s.icon}  \${s.title}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -290,7 +290,7 @@ result = {
         description: 'Displays the rendered scene.',
         inputs: [{ name: 'text', type: 'string', description: 'Scene text' }],
         outputs: [],
-        code: `result = inputs.text`,
+        code: `return inputs.text`,
         prompt: '',
       },
     },

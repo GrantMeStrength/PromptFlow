@@ -30,7 +30,7 @@ export const dataMapperProject: FlowProject = {
         outputs: [],
         code: '',
         prompt: '',
-        noteText: 'Paste a plain list of names (one per line) and the pipeline enriches each entry with a likely job title, industry, and short description — in a single LLM call. Demonstrates the split → batch-enrich → reformat pattern common in data processing pipelines.',
+        noteText: 'Paste a plain list of names (one per line) and the pipeline enriches each entry with a likely job title, industry, and short description — in a single LLM call. Demonstrates the split → batch-enrich → reformat pattern. A state node tracks the cumulative total of items enriched across all runs — run it several times to see the lifetime count grow.',
       },
     },
     {
@@ -101,6 +101,23 @@ return { enriched }`,
       },
     },
     {
+      id: 'state-read-total',
+      type: 'state',
+      position: { x: 860, y: 60 },
+      data: {
+        label: 'Total Processed',
+        kind: 'state',
+        description: 'Reads the cumulative count of items enriched across all pipeline runs.',
+        inputs: [],
+        outputs: [{ name: 'value', type: 'number', description: 'Total items processed so far (lifetime)' }],
+        stateKey: 'totalItemsProcessed',
+        stateDefault: '0',
+        stateMode: 'read',
+        code: '',
+        prompt: '',
+      },
+    },
+    {
       id: 'fn-collect',
       type: 'function',
       position: { x: 860, y: 240 },
@@ -108,48 +125,69 @@ return { enriched }`,
         label: 'Format Results',
         kind: 'function',
         description:
-          'Parses the LLM JSON response and formats the enriched items as a readable markdown table. Falls back to raw output if JSON parsing fails.',
+          'Parses the LLM JSON response and formats items as a markdown table. Also computes a new lifetime total by adding this batch to the running state count.',
         inputs: [
           { name: 'enriched', type: 'string', description: 'JSON array from LLM' },
           { name: 'count', type: 'number', description: 'Expected item count' },
+          { name: 'prevTotal', type: 'number', description: 'Cumulative total from state' },
         ],
         outputs: [
           { name: 'table', type: 'string', description: 'Formatted markdown table' },
-          { name: 'processedCount', type: 'number', description: 'Number of items processed' },
+          { name: 'processedCount', type: 'number', description: 'Number of items processed this run' },
+          { name: 'newTotal', type: 'number', description: 'Updated cumulative total (this run + all previous)' },
         ],
         code: `const raw = String(inputs.enriched ?? '')
 const count = Number(inputs.count ?? 0)
+const prevTotal = Number(inputs.prevTotal ?? 0)
 let rows = []
 try {
   // Strip any accidental markdown fences
   const cleaned = raw.replace(/^\`\`\`json?\\n?/i, '').replace(/\`\`\`$/, '').trim()
   rows = JSON.parse(cleaned)
 } catch {
-  return { table: raw, processedCount: count }
+  return { table: raw, processedCount: count, newTotal: prevTotal + count }
 }
 const header = '| # | Item | Description |\\n|---|------|-------------|'
 const lines = rows.map((r, i) => \`| \${i + 1} | **\${r.name}** | \${r.description} |\`)
 const table = [header, ...lines].join('\\n')
-return { table, processedCount: rows.length }`,
-        prompt: 'Parse LLM JSON output and format enriched items as a markdown table',
+return { table, processedCount: rows.length, newTotal: prevTotal + rows.length }`,
+        prompt: 'Parse LLM JSON output and format as a markdown table, computing the new lifetime total',
+      },
+    },
+    {
+      id: 'state-write-total',
+      type: 'state',
+      position: { x: 1120, y: 80 },
+      data: {
+        label: 'Save Total',
+        kind: 'state',
+        description: 'Persists the updated cumulative items-processed count for the next run.',
+        inputs: [{ name: 'value', type: 'number', description: 'New cumulative total to store' }],
+        outputs: [{ name: 'value', type: 'number', description: 'Stored value (pass-through)' }],
+        stateKey: 'totalItemsProcessed',
+        stateDefault: '0',
+        stateMode: 'write',
+        code: '',
+        prompt: '',
       },
     },
     {
       id: 'output-table',
       type: 'output',
-      position: { x: 1120, y: 240 },
+      position: { x: 1380, y: 240 },
       data: {
         label: 'Enriched Table',
         kind: 'output',
         description:
-          'Displays the final formatted table of items with their LLM-generated descriptions. Shows the count of processed items.',
+          'Displays the final formatted table of items with their LLM-generated descriptions. Shows both the batch count and the cumulative lifetime total.',
         inputs: [
           { name: 'table', type: 'string', description: 'Markdown table of enriched items' },
-          { name: 'processedCount', type: 'number', description: 'Items processed' },
+          { name: 'processedCount', type: 'number', description: 'Items processed this run' },
+          { name: 'newTotal', type: 'number', description: 'Cumulative total items processed (all runs)' },
         ],
         outputs: [],
-        code: `return { table: inputs.table, processedCount: inputs.processedCount }`,
-        prompt: 'Output the enriched item table',
+        code: `return { table: inputs.table, processedCount: inputs.processedCount, lifetimeTotal: inputs.newTotal }`,
+        prompt: 'Output the enriched item table with batch count and lifetime total',
       },
     },
     {
@@ -173,7 +211,10 @@ return { table, processedCount: rows.length }`,
     { id: 'e-split-llm-items', source: 'fn-split', target: 'llm-enrich', sourceHandle: 'items', targetHandle: 'items', animated: true, type: 'gradient' },
     { id: 'e-split-collect-count', source: 'fn-split', target: 'fn-collect', sourceHandle: 'count', targetHandle: 'count', animated: true, type: 'gradient' },
     { id: 'e-llm-collect', source: 'llm-enrich', target: 'fn-collect', sourceHandle: 'enriched', targetHandle: 'enriched', animated: true, type: 'gradient' },
+    { id: 'e-total-collect', source: 'state-read-total', target: 'fn-collect', sourceHandle: 'value', targetHandle: 'prevTotal', animated: true, type: 'gradient' },
+    { id: 'e-collect-save-total', source: 'fn-collect', target: 'state-write-total', sourceHandle: 'newTotal', targetHandle: 'value', animated: true, type: 'gradient' },
     { id: 'e-collect-out-table', source: 'fn-collect', target: 'output-table', sourceHandle: 'table', targetHandle: 'table', animated: true, type: 'gradient' },
     { id: 'e-collect-out-count', source: 'fn-collect', target: 'output-table', sourceHandle: 'processedCount', targetHandle: 'processedCount', animated: true, type: 'gradient' },
+    { id: 'e-collect-out-total', source: 'fn-collect', target: 'output-table', sourceHandle: 'newTotal', targetHandle: 'newTotal', animated: true, type: 'gradient' },
   ],
 }
