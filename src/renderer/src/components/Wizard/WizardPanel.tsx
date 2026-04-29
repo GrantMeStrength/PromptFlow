@@ -163,10 +163,12 @@ export function WizardPanel({ onClose }: WizardPanelProps) {
     setLoading(true)
     try {
       if (!api?.callLLMChat) throw new Error('LLM chat not available — make sure the app is running in Electron with an API key set')
-      const reply = await api.callLLMChat(
+      const response = await api.callLLMChat(
         nextMessages.map(m => ({ role: m.role, content: m.content })),
         systemPrompt,
       )
+      if (!response.success) throw new Error(response.error || 'LLM call failed')
+      const reply = response.result ?? ''
       const assistantMsg: Message = { role: 'assistant', content: reply }
       setMessages([...nextMessages, assistantMsg])
       const graph = extractGraph(reply)
