@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import Editor from '@monaco-editor/react'
-import { X, Trash2, ChevronDown, ChevronUp, Zap, RotateCcw, Loader2, ArrowRightLeft, Sparkles } from 'lucide-react'
+import { X, Trash2, ChevronDown, ChevronUp, Zap, RotateCcw, Loader2, ArrowRightLeft, Sparkles, BookMarked, FolderOpen } from 'lucide-react'
 import { useFlowStore } from '../../store/flowStore'
 import type { NodeKind, PortDef } from '../../types'
 
@@ -238,23 +238,74 @@ export function NodeInspector() {
 
         {/* LLM-specific fields */}
         {data.kind === 'llm' && (
-          <div>
-            <label className="text-[11px] uppercase tracking-widest text-slate-500 block mb-1.5">
-              Prompt Template
-            </label>
-            <textarea
-              className="w-full bg-[#0f0f1a] text-slate-300 text-xs rounded-lg p-2.5 border border-[#2a2a3f] focus:border-indigo-500 outline-none resize-none leading-relaxed font-mono"
-              rows={4}
-              value={data.llmPromptTemplate ?? ''}
-              onChange={(e) => updateNodeData(node.id, { llmPromptTemplate: e.target.value })}
-            />
-            <div className="flex items-center gap-2 mt-2">
-              <label className="text-[11px] text-slate-500">Model</label>
-              <input
-                className="flex-1 bg-[#0f0f1a] text-slate-300 text-xs rounded px-2 py-1 border border-[#2a2a3f] focus:border-indigo-500 outline-none font-mono"
-                value={data.llmModel ?? ''}
-                onChange={(e) => updateNodeData(node.id, { llmModel: e.target.value })}
+          <div className="space-y-3">
+            <div>
+              <label className="text-[11px] uppercase tracking-widest text-slate-500 block mb-1.5">
+                Prompt Template
+              </label>
+              <textarea
+                className="w-full bg-[#0f0f1a] text-slate-300 text-xs rounded-lg p-2.5 border border-[#2a2a3f] focus:border-indigo-500 outline-none resize-none leading-relaxed font-mono"
+                rows={4}
+                value={data.llmPromptTemplate ?? ''}
+                onChange={(e) => updateNodeData(node.id, { llmPromptTemplate: e.target.value })}
               />
+              <div className="flex items-center gap-2 mt-2">
+                <label className="text-[11px] text-slate-500">Model</label>
+                <input
+                  className="flex-1 bg-[#0f0f1a] text-slate-300 text-xs rounded px-2 py-1 border border-[#2a2a3f] focus:border-indigo-500 outline-none font-mono"
+                  value={data.llmModel ?? ''}
+                  onChange={(e) => updateNodeData(node.id, { llmModel: e.target.value })}
+                />
+              </div>
+            </div>
+
+            {/* Skills file */}
+            <div>
+              <label className="text-[11px] uppercase tracking-widest text-slate-500 block mb-1.5">
+                Skills File (System Prompt)
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={async () => {
+                    const res = await window.electronAPI?.pickSkillsFile()
+                    if (res?.success && res.filename && res.content !== undefined) {
+                      updateNodeData(node.id, { llmSkillsFile: res.filename, llmSkillsContent: res.content })
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#2a2a3f] hover:border-indigo-500 text-slate-400 hover:text-slate-200 text-xs transition-colors"
+                >
+                  <FolderOpen size={12} />
+                  {data.llmSkillsFile ? 'Change file' : 'Load .md file'}
+                </button>
+                {data.llmSkillsFile && (
+                  <button
+                    onClick={() => updateNodeData(node.id, { llmSkillsFile: undefined, llmSkillsContent: undefined })}
+                    className="p-1 text-slate-600 hover:text-red-400 transition-colors"
+                    title="Remove skills file"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+
+              {data.llmSkillsFile && (
+                <div className="mt-2">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <BookMarked size={11} className="text-indigo-400" />
+                    <span className="text-[11px] text-indigo-300 font-medium">{data.llmSkillsFile}</span>
+                  </div>
+                  <textarea
+                    className="w-full bg-[#0a0a14] text-slate-400 text-[11px] rounded-lg p-2 border border-[#2a2a3f] focus:border-indigo-500 outline-none resize-none leading-relaxed font-mono"
+                    rows={5}
+                    value={data.llmSkillsContent ?? ''}
+                    onChange={(e) => updateNodeData(node.id, { llmSkillsContent: e.target.value })}
+                    placeholder="Skills / system prompt content…"
+                  />
+                  <p className="text-[10px] text-slate-600 mt-1">
+                    Injected as the system prompt. Use <code className="text-indigo-400">llmSystemPrompt</code> in your node code.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -205,6 +205,22 @@ ipcMain.handle('call-llm', async (_event, prompt: string, systemPrompt?: string)
   }
 })
 
+ipcMain.handle('pick-skills-file', async () => {
+  try {
+    const { filePaths, canceled } = await dialog.showOpenDialog({
+      title: 'Select Skills File',
+      filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'txt'] }],
+      properties: ['openFile'],
+    })
+    if (canceled || filePaths.length === 0) return { success: false }
+    const content = fs.readFileSync(filePaths[0], 'utf-8')
+    const filename = path.basename(filePaths[0])
+    return { success: true, filename, content }
+  } catch (err) {
+    return { success: false, error: (err as Error).message }
+  }
+})
+
 ipcMain.handle('run-code', async (_event, code: string, input: unknown, uiInputs?: Record<string, unknown>) => {
   try {
     const sandbox: Record<string, unknown> = {

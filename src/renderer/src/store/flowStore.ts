@@ -72,7 +72,7 @@ const defaultNodeData = (kind: NodeKind): NodeData => {
       outputs: [{ name: 'response', type: 'string' }],
       llmModel: 'gpt-4o',
       llmPromptTemplate: 'Summarize the following text:\\n\\n{{text}}',
-      code: `// Calls the configured LLM (callLLM is injected by the runtime)\nconst text = String(inputs.text ?? inputs.content ?? inputs.value ?? '')\nconst prompt = llmPromptTemplate ? llmPromptTemplate.replace('{{text}}', text) : text\nconst response = await callLLM(llmModel || 'gpt-4o-mini', prompt)\nreturn { response }`,
+      code: `// Calls the configured LLM (callLLM is injected by the runtime)\nconst text = String(inputs.text ?? inputs.content ?? inputs.value ?? '')\nconst prompt = llmPromptTemplate ? llmPromptTemplate.replace('{{text}}', text) : text\n// llmSystemPrompt is auto-injected by the generator when a skills file is attached\nconst response = await callLLM(llmModel || 'gpt-4o-mini', prompt, typeof llmSystemPrompt !== 'undefined' ? llmSystemPrompt : undefined)\nreturn { response }`,
     },
     decision: {
       label: 'Decision',

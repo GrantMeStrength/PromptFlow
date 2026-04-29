@@ -93,6 +93,10 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
         const tmpl = (node.data.llmPromptTemplate || '{{text}}').replace(/`/g, '\\`')
         lines.push(`  const llmModel = \`${model}\``)
         lines.push(`  const llmPromptTemplate = \`${tmpl}\``)
+        if (node.data.llmSkillsContent) {
+          const skills = node.data.llmSkillsContent.replace(/`/g, '\\`')
+          lines.push(`  const llmSystemPrompt = \`${skills}\``)
+        }
       }
       // Indent the node's code
       const nodeCode = node.data.code || 'return inputs'

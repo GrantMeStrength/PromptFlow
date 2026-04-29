@@ -13,6 +13,7 @@ const api: ElectronAPI = {
     ipcRenderer.on('menu-action', handler)
     return () => ipcRenderer.off('menu-action', handler)
   },
+  pickSkillsFile: () => ipcRenderer.invoke('pick-skills-file'),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

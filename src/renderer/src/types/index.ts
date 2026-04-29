@@ -25,6 +25,8 @@ export interface NodeData {
   /** Mock LLM response for prototype (real API call eventually) */
   llmModel?: string
   llmPromptTemplate?: string
+  llmSkillsFile?: string    // display name of loaded .md file
+  llmSkillsContent?: string // full markdown content used as system prompt
   /** For decision nodes: names of the output branches */
   branches?: string[]
   /** Execution result from last run */
@@ -80,6 +82,7 @@ export interface ElectronAPI {
   getSettings: () => Promise<LLMSettings>
   saveSettings: (settings: LLMSettings) => Promise<{ success: boolean }>
   onMenuAction: (callback: (action: string) => void) => () => void
+  pickSkillsFile: () => Promise<{ success: boolean; filename?: string; content?: string; error?: string }>
 }
 
 declare global {
