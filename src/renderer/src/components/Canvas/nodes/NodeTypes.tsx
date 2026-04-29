@@ -383,56 +383,69 @@ OutputNode.displayName = 'OutputNode'
 export const NoteNode = memo(({ id, data, selected }: NodeProps<NodeData>) => {
   const { updateNodeData, selectNode } = useFlowStore()
   const [editing, setEditing] = useState(false)
+  const FOLD = 18
+
+  const clipShape = `polygon(0 0, calc(100% - ${FOLD}px) 0, 100% ${FOLD}px, 100% 100%, 0 100%)`
 
   return (
+    // Outer div provides the border by showing 1px of its background through padding.
+    // Both divs share the same clip-path so the border follows the pentagon shape,
+    // including the diagonal fold edge at top-right.
     <div
       onClick={() => selectNode(id)}
-      style={{
-        // Folded-corner shape via clip-path
-        clipPath: 'polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%)',
-        minWidth: 160,
-        minHeight: 90,
-      }}
-      className={`relative bg-yellow-900/70 border ${selected ? 'border-yellow-400' : 'border-yellow-600/60'} rounded-lg shadow-lg p-3 cursor-grab active:cursor-grabbing`}
+      style={{ clipPath: clipShape, minWidth: 160, minHeight: 90, padding: '1px' }}
+      className={`relative shadow-lg cursor-grab active:cursor-grabbing ${
+        selected ? 'bg-yellow-400' : 'bg-yellow-600/50'
+      }`}
     >
-      {/* Fold triangle */}
+      {/* Inner note body */}
       <div
-        className="absolute top-0 right-0 w-[14px] h-[14px] bg-yellow-950/80"
-        style={{ clipPath: 'polygon(100% 0, 0 0, 100% 100%)' }}
-      />
+        style={{ clipPath: clipShape }}
+        className="relative bg-yellow-900/75 p-3 h-full w-full"
+      >
+        {/* Fold shadow — darkens the corner of the visible area where the fold meets the body */}
+        <div
+          className="absolute top-0 right-0 pointer-events-none"
+          style={{
+            width: FOLD * 2,
+            height: FOLD * 2,
+            background: `radial-gradient(circle at 100% 0%, rgba(0,0,0,0.35) 0%, transparent 65%)`,
+          }}
+        />
 
-      {/* No connection handles — sticky notes are purely decorative */}
+        {/* No connection handles — sticky notes are purely decorative */}
 
-      {/* Title */}
-      {editing ? (
-        <input
-          autoFocus
-          className="w-full bg-transparent text-yellow-200 font-semibold text-xs outline-none border-b border-yellow-500/40 mb-1 pb-0.5"
-          value={data.label}
-          onChange={e => updateNodeData(id, { label: e.target.value })}
-          onBlur={() => setEditing(false)}
-          onKeyDown={e => { if (e.key === 'Enter') setEditing(false) }}
+        {/* Title */}
+        {editing ? (
+          <input
+            autoFocus
+            className="w-full bg-transparent text-yellow-200 font-semibold text-xs outline-none border-b border-yellow-500/40 mb-1 pb-0.5"
+            value={data.label}
+            onChange={e => updateNodeData(id, { label: e.target.value })}
+            onBlur={() => setEditing(false)}
+            onKeyDown={e => { if (e.key === 'Enter') setEditing(false) }}
+            onClick={e => e.stopPropagation()}
+          />
+        ) : (
+          <div
+            className="text-yellow-200 font-semibold text-xs mb-1.5 truncate"
+            onDoubleClick={e => { e.stopPropagation(); setEditing(true) }}
+            title="Double-click to rename"
+          >
+            {data.label || 'Note'}
+          </div>
+        )}
+
+        {/* Body text */}
+        <textarea
+          className="w-full bg-transparent text-yellow-100/80 text-xs resize-none outline-none placeholder:text-yellow-700/60 leading-relaxed nodrag nowheel"
+          rows={4}
+          placeholder="Add a note…"
+          value={data.noteText ?? ''}
+          onChange={e => updateNodeData(id, { noteText: e.target.value })}
           onClick={e => e.stopPropagation()}
         />
-      ) : (
-        <div
-          className="text-yellow-200 font-semibold text-xs mb-1.5 truncate"
-          onDoubleClick={e => { e.stopPropagation(); setEditing(true) }}
-          title="Double-click to rename"
-        >
-          {data.label || 'Note'}
-        </div>
-      )}
-
-      {/* Body text */}
-      <textarea
-        className="w-full bg-transparent text-yellow-100/80 text-xs resize-none outline-none placeholder:text-yellow-700/60 leading-relaxed nodrag nowheel"
-        rows={4}
-        placeholder="Add a note…"
-        value={data.noteText ?? ''}
-        onChange={e => updateNodeData(id, { noteText: e.target.value })}
-        onClick={e => e.stopPropagation()}
-      />
+      </div>
     </div>
   )
 })
