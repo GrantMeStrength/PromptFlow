@@ -47,8 +47,10 @@ YOUR BEHAVIOUR:
 
 const ANALYSIS_SYSTEM_PROMPT = `You are a PromptFlow workflow analyst. You will be given a description of a visual node-graph workflow and must analyse it for potential issues.
 
+Note nodes are purely decorative annotations and must NEVER be flagged as disconnected, unfed, or problematic in any way — ignore them completely during analysis.
+
 Check for:
-1. **Disconnected nodes** — nodes with no incoming or outgoing connections (isolated)
+1. **Disconnected nodes** — non-note nodes with no incoming or outgoing connections (isolated)
 2. **Incomplete decision branches** — Decision nodes where the true OR false branch has no outgoing connection
 3. **Dead ends** — nodes that produce output but nothing consumes it (except Output nodes, which are intentional sinks)
 4. **Unfed nodes** — LLM, Function, or Pipe nodes that have no incoming connections
@@ -67,13 +69,14 @@ Response format:
 - If no issues are found, say so clearly and briefly note what the graph does well`
 
 function serializeGraph(nodes: FlowNode[], edges: FlowEdge[]): string {
+  const nonNoteNodes = nodes.filter((n) => n.data.kind !== 'note')
   const lines: string[] = [
-    `WORKFLOW GRAPH — ${nodes.length} node${nodes.length !== 1 ? 's' : ''}, ${edges.length} edge${edges.length !== 1 ? 's' : ''}`,
+    `WORKFLOW GRAPH — ${nonNoteNodes.length} node${nonNoteNodes.length !== 1 ? 's' : ''}, ${edges.length} edge${edges.length !== 1 ? 's' : ''}`,
     '',
     'NODES:',
   ]
 
-  for (const n of nodes) {
+  for (const n of nonNoteNodes) {
     const d = n.data
     let extra = ''
     if (d.kind === 'llm')      extra = ` | model: ${d.llmModel || 'default'} | prompt: "${(d.llmPromptTemplate || '').slice(0, 80)}"`
