@@ -21,6 +21,21 @@ export const meetingNotesProject: FlowProject = {
   updated: '2026-04-28T00:00:00.000Z',
   nodes: [
     {
+      id: 'note-intro',
+      type: 'note',
+      position: { x: 80, y: -140 },
+      data: {
+        label: 'Meeting Notes Processor',
+        kind: 'note',
+        description: '',
+        inputs: [],
+        outputs: [],
+        code: '',
+        prompt: '',
+        noteText: 'Paste raw meeting notes and get two outputs simultaneously: a bullet-point action item list (with owners and deadlines) and a concise executive summary. Two specialised LLM nodes run in parallel with different prompts, then a formatting node combines their results into a clean document.',
+      },
+    },
+    {
       id: 'ui-notes',
       type: 'ui',
       position: { x: 80, y: 260 },

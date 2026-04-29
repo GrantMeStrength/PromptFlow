@@ -20,6 +20,21 @@ export const emailComposerProject: FlowProject = {
   updated: '2026-04-28T00:00:00.000Z',
   nodes: [
     {
+      id: 'note-intro',
+      type: 'note',
+      position: { x: 80, y: -140 },
+      data: {
+        label: 'Email Composer',
+        kind: 'note',
+        description: '',
+        inputs: [],
+        outputs: [],
+        code: '',
+        prompt: '',
+        noteText: 'Enter a recipient name, topic, and tone, then press Run. An LLM drafts a polished email, which is then passed through a metadata node that appends word count, reading time, and a timestamp before final output. A simple example of post-processing an LLM result.',
+      },
+    },
+    {
       id: 'ui-tone',
       type: 'ui',
       position: { x: 80, y: 120 },

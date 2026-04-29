@@ -22,6 +22,21 @@ export const barChartProject: FlowProject = {
   updated: '2026-04-29T00:00:00.000Z',
   nodes: [
     {
+      id: 'note-intro',
+      type: 'note',
+      position: { x: 60, y: -140 },
+      data: {
+        label: 'Bar Chart Generator',
+        kind: 'note',
+        description: '',
+        inputs: [],
+        outputs: [],
+        code: '',
+        prompt: '',
+        noteText: 'Enter a chart title and a comma-separated list of categories, then press Run. An LLM estimates realistic percentages for each category and the result is rendered as a colour-coded SVG bar chart — entirely within PromptFlow, no external libraries needed.',
+      },
+    },
+    {
       id: 'ui-topic',
       type: 'ui',
       position: { x: 60, y: 120 },

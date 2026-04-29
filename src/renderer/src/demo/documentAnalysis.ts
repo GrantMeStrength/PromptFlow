@@ -10,6 +10,21 @@ export const demoProject: FlowProject = {
   updated: '2026-04-28T00:00:00.000Z',
   nodes: [
     {
+      id: 'note-intro',
+      type: 'note',
+      position: { x: 60, y: -140 },
+      data: {
+        label: 'Document Analyser',
+        kind: 'note',
+        description: '',
+        inputs: [],
+        outputs: [],
+        code: '',
+        prompt: '',
+        noteText: 'Paste any block of text and receive three analyses at once: keyword extraction, word/sentence/paragraph statistics, and an LLM-generated summary. The three processing nodes run in parallel (fan-out pattern), then converge into a single structured report.',
+      },
+    },
+    {
       id: 'node-input',
       type: 'input',
       position: { x: 60, y: 200 },

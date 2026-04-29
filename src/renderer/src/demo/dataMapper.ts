@@ -19,6 +19,21 @@ export const dataMapperProject: FlowProject = {
   updated: '2026-04-29T00:00:00.000Z',
   nodes: [
     {
+      id: 'note-intro',
+      type: 'note',
+      position: { x: 60, y: -140 },
+      data: {
+        label: 'Batch Data Mapper',
+        kind: 'note',
+        description: '',
+        inputs: [],
+        outputs: [],
+        code: '',
+        prompt: '',
+        noteText: 'Paste a plain list of names (one per line) and the pipeline enriches each entry with a likely job title, industry, and short description — in a single LLM call. Demonstrates the split → batch-enrich → reformat pattern common in data processing pipelines.',
+      },
+    },
+    {
       id: 'ui-list',
       type: 'ui',
       position: { x: 60, y: 240 },

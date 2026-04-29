@@ -20,6 +20,21 @@ export const codeReviewProject: FlowProject = {
   updated: '2026-04-28T00:00:00.000Z',
   nodes: [
     {
+      id: 'note-intro',
+      type: 'note',
+      position: { x: 80, y: -140 },
+      data: {
+        label: 'AI Code Reviewer',
+        kind: 'note',
+        description: '',
+        inputs: [],
+        outputs: [],
+        code: '',
+        prompt: '',
+        noteText: 'Paste any code snippet and choose a review focus (e.g. "security", "performance", "readability"). An LLM produces a structured critique while a parallel function node instantly computes code statistics — line count, function count, import count. Both results are merged into a single formatted report.',
+      },
+    },
+    {
       id: 'ui-file',
       type: 'ui',
       position: { x: 80, y: 120 },

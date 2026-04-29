@@ -19,6 +19,21 @@ export const reportGeneratorDemo: FlowProject = {
   updated: '2026-04-29T00:00:00.000Z',
   nodes: [
     {
+      id: 'note-intro',
+      type: 'note',
+      position: { x: 60, y: -140 },
+      data: {
+        label: 'Research Report Generator',
+        kind: 'note',
+        description: '',
+        inputs: [],
+        outputs: [],
+        code: '',
+        prompt: '',
+        noteText: 'Enter any research topic and press Run. An LLM generates structured content (overview, key findings, a data table), which a function node wraps in styled HTML. The output panel renders the report in-place — use the HTML or PDF export buttons to save a shareable document.',
+      },
+    },
+    {
       id: 'ui-topic',
       type: 'ui',
       position: { x: 60, y: 200 },
