@@ -11,6 +11,7 @@ const KIND_COLOR: Record<string, string> = {
   pipe:     '#06b6d4',
   ui:       '#d946ef',
   mcp:      '#14b8a6',
+  state:    '#22d3ee',
   note:     '#eab308',
 }
 const FALLBACK = '#6366f1'

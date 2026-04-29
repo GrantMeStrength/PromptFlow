@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import Editor from '@monaco-editor/react'
-import { X, Trash2, ChevronDown, ChevronUp, Zap, RotateCcw, Loader2, ArrowRightLeft, Sparkles, BookMarked, FolderOpen, Plug, CheckCircle, AlertCircle } from 'lucide-react'
+import { X, Trash2, ChevronDown, ChevronUp, Zap, RotateCcw, Loader2, ArrowRightLeft, Sparkles, BookMarked, FolderOpen, Plug, CheckCircle, AlertCircle, Database } from 'lucide-react'
 import { useFlowStore } from '../../store/flowStore'
 import type { NodeKind, PortDef } from '../../types'
 
@@ -35,6 +35,7 @@ const kindColors: Record<NodeKind, string> = {
   pipe: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
   ui: 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/40',
   mcp: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
+  state: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
   note: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40',
 }
 
@@ -554,8 +555,75 @@ export function NodeInspector() {
           </div>
         )}
 
-        {/* Code (hide for UI and MCP nodes) */}
-        {data.kind !== 'ui' && data.kind !== 'mcp' && (
+        {/* State Variable Configuration */}
+        {data.kind === 'state' && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-cyan-400 mb-1">
+              <Database size={11} />
+              State Variable Config
+            </div>
+
+            {/* Variable Key */}
+            <div>
+              <label className="block text-[11px] text-slate-400 mb-1">Variable Name</label>
+              <input
+                className="w-full bg-[#0f0f1a] text-slate-200 text-xs rounded-lg px-2.5 py-1.5 border border-[#2a2a3f] focus:border-cyan-500 outline-none font-mono"
+                placeholder="e.g. currentLocation"
+                value={data.stateKey ?? ''}
+                onChange={(e) => updateNodeData(node.id, { stateKey: e.target.value })}
+              />
+            </div>
+
+            {/* Mode toggle */}
+            <div>
+              <label className="block text-[11px] text-slate-400 mb-1">Mode</label>
+              <div className="flex gap-2">
+                {(['read', 'write'] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => updateNodeData(node.id, { stateMode: m })}
+                    className={`flex-1 text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                      (data.stateMode ?? 'read') === m
+                        ? 'bg-cyan-700 border-cyan-500 text-white'
+                        : 'bg-[#0f0f1a] border-[#2a2a3f] text-slate-400 hover:border-cyan-700'
+                    }`}
+                  >
+                    {m === 'read' ? '📖 Read' : '✏️ Write'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Default value (shown only for read mode) */}
+            {(data.stateMode ?? 'read') === 'read' && (
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">Default value (JSON)</label>
+                <input
+                  className="w-full bg-[#0f0f1a] text-slate-200 text-xs rounded-lg px-2.5 py-1.5 border border-[#2a2a3f] focus:border-cyan-500 outline-none font-mono"
+                  placeholder='null, "beach", 0, false, …'
+                  value={data.stateDefault ?? ''}
+                  onChange={(e) => updateNodeData(node.id, { stateDefault: e.target.value })}
+                />
+                <p className="text-[10px] text-slate-600 mt-1">Used when the variable has never been set.</p>
+              </div>
+            )}
+
+            {/* Clear all button */}
+            <button
+              onClick={async () => {
+                if (!window.confirm('Clear all state variables for this project? This cannot be undone.')) return
+                const api = window.electronAPI
+                if (api) await api.clearStateVars()
+              }}
+              className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg bg-red-900/50 hover:bg-red-800/60 border border-red-700/40 text-red-300 transition-colors w-full justify-center"
+            >
+              <Trash2 size={12} /> Clear All State Variables
+            </button>
+          </div>
+        )}
+
+        {/* Code (hide for UI, MCP, and State nodes) */}
+        {data.kind !== 'ui' && data.kind !== 'mcp' && data.kind !== 'state' && (
         <div>
           <button
             className="flex items-center justify-between w-full text-[11px] uppercase tracking-widest text-slate-500 mb-1.5"
@@ -587,8 +655,8 @@ export function NodeInspector() {
         </div>
         )}
 
-        {/* Prompt / Regenerate (hide for UI and MCP nodes) */}
-        {data.kind !== 'ui' && data.kind !== 'mcp' && (
+        {/* Prompt / Regenerate (hide for UI, MCP, and State nodes) */}
+        {data.kind !== 'ui' && data.kind !== 'mcp' && data.kind !== 'state' && (
           <div>
             <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-slate-500 mb-1.5">
               <Zap size={11} />

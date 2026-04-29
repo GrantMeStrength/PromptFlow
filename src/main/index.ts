@@ -504,6 +504,9 @@ ipcMain.handle('run-code', async (_event, code: string, input: unknown, uiInputs
       // Inject callLLMWithTools for LLM nodes connected to MCP servers
       callLLMWithTools: (model: string, prompt: string, systemPrompt: string | undefined, mcpConfigs: McpConfig[]) =>
         callLLMWithTools(model, prompt, systemPrompt, mcpConfigs),
+      // Inject state variable helpers so State nodes can persist data between runs
+      getState: (key: string, defaultValue: unknown = null) => readStateVar(key, defaultValue),
+      setState: (key: string, value: unknown) => writeStateVar(key, value),
       result: undefined,
     }
     const context = vm.createContext(sandbox)
@@ -511,6 +514,63 @@ ipcMain.handle('run-code', async (_event, code: string, input: unknown, uiInputs
     const promise = script.runInContext(context) as Promise<unknown>
     sandbox.result = await promise
     return { success: true, result: sandbox.result }
+  } catch (err) {
+    return { success: false, error: (err as Error).message }
+  }
+})
+
+// ─── State Variable Storage ───────────────────────────────────────────────────
+
+function getStatePath(): string {
+  return path.join(app.getPath('userData'), 'promptflow-state.json')
+}
+
+function readStateVar(key: string, defaultValue: unknown = null): unknown {
+  try {
+    const p = getStatePath()
+    if (!fs.existsSync(p)) return defaultValue
+    const data = JSON.parse(fs.readFileSync(p, 'utf8')) as Record<string, unknown>
+    return key in data ? data[key] : defaultValue
+  } catch {
+    return defaultValue
+  }
+}
+
+function writeStateVar(key: string, value: unknown): void {
+  try {
+    const p = getStatePath()
+    const data: Record<string, unknown> = fs.existsSync(p)
+      ? (JSON.parse(fs.readFileSync(p, 'utf8')) as Record<string, unknown>)
+      : {}
+    data[key] = value
+    fs.writeFileSync(p, JSON.stringify(data, null, 2))
+  } catch (err) {
+    console.error('State write error:', err)
+  }
+}
+
+ipcMain.handle('get-state-var', (_event, key: string) => {
+  try {
+    return { success: true, value: readStateVar(key) }
+  } catch (err) {
+    return { success: false, error: (err as Error).message }
+  }
+})
+
+ipcMain.handle('set-state-var', (_event, key: string, value: unknown) => {
+  try {
+    writeStateVar(key, value)
+    return { success: true }
+  } catch (err) {
+    return { success: false, error: (err as Error).message }
+  }
+})
+
+ipcMain.handle('clear-state-vars', () => {
+  try {
+    const p = getStatePath()
+    if (fs.existsSync(p)) fs.unlinkSync(p)
+    return { success: true }
   } catch (err) {
     return { success: false, error: (err as Error).message }
   }

@@ -25,6 +25,10 @@ const api: ElectronAPI = {
   // Report export
   saveReportHtml: (html: string) => ipcRenderer.invoke('save-report-html', html),
   exportReportPdf: (html: string) => ipcRenderer.invoke('export-report-pdf', html),
+  // State variables
+  getStateVar: (key: string) => ipcRenderer.invoke('get-state-var', key),
+  setStateVar: (key: string, value: unknown) => ipcRenderer.invoke('set-state-var', key, value),
+  clearStateVars: () => ipcRenderer.invoke('clear-state-vars'),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

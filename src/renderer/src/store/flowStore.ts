@@ -128,6 +128,16 @@ const defaultNodeData = (kind: NodeKind): NodeData => {
       mcpEnv: '',
       code: `// MCP Server node – provides tools to connected LLM nodes`,
     },
+    state: {
+      label: 'State Variable',
+      description: 'Reads or writes a named value that persists between pipeline runs.',
+      inputs: [{ name: 'value', type: 'any', description: 'Value to store (write mode only)' }],
+      outputs: [{ name: 'value', type: 'any', description: 'Stored value' }],
+      stateKey: 'myVariable',
+      stateDefault: 'null',
+      stateMode: 'read' as const,
+      code: '',
+    },
     note: {
       label: 'Note',
       description: '',
@@ -328,10 +338,13 @@ export const useFlowStore = create<FlowState>((set, get) => ({
         if (!res.success) throw new Error(res.error)
         result = res.result
       } else {
-        // Browser fallback: run in eval (dev only)
+        // Browser fallback: run in eval (dev only) with in-memory state store
+        const browserState: Record<string, unknown> = {}
+        const getState = async (key: string, def: unknown = null) => browserState[key] ?? def
+        const setState = async (key: string, val: unknown) => { browserState[key] = val }
         // eslint-disable-next-line no-new-func
-        const fn = new Function('inputs', '__uiInputs__', code)
-        result = fn({}, uiInputs)
+        const fn = new Function('inputs', '__uiInputs__', 'getState', 'setState', code)
+        result = fn({}, uiInputs, getState, setState)
         if (result instanceof Promise) result = await result
       }
 

@@ -2,7 +2,7 @@ import React, { memo, useState } from 'react'
 import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 import type { NodeData } from '../../../types'
-import { Download, Upload, Cpu, GitBranch, Terminal, ArrowRightLeft, MessageSquare, FileText, ListChecks, Plug, StickyNote } from 'lucide-react'
+import { Download, Upload, Cpu, GitBranch, Terminal, ArrowRightLeft, MessageSquare, FileText, ListChecks, Plug, StickyNote, Database } from 'lucide-react'
 import { useFlowStore } from '../../../store/flowStore'
 
 // ─── Shared node styles ───────────────────────────────────────────────────────
@@ -37,6 +37,12 @@ const kindMeta: Record<string, { bg: string; border: string; icon: React.ReactNo
     border: 'border-rose-500',
     icon: <Upload size={14} />,
     label: 'OUTPUT',
+  },
+  state: {
+    bg: 'bg-cyan-900/80',
+    border: 'border-cyan-500',
+    icon: <Database size={14} />,
+    label: 'STATE',
   },
 }
 
@@ -377,6 +383,60 @@ InputNode.displayName = 'InputNode'
 FunctionNode.displayName = 'FunctionNode'
 DecisionNode.displayName = 'DecisionNode'
 OutputNode.displayName = 'OutputNode'
+
+// ─── State Variable node ──────────────────────────────────────────────────────
+
+export const StateNode = memo(({ id, data, selected }: NodeProps<NodeData>) => {
+  const { selectNode } = useFlowStore()
+  const isWrite = data.stateMode === 'write'
+  return (
+    <div
+      onClick={() => selectNode(id)}
+      className={`
+        min-w-[160px] max-w-[200px] rounded-xl border-2 border-cyan-500 bg-cyan-900/80
+        shadow-lg cursor-pointer transition-all duration-150
+        ${selected ? 'ring-2 ring-indigo-400 ring-offset-1 ring-offset-transparent' : ''}
+        ${data.hasError ? 'border-red-400 ring-2 ring-red-400' : ''}
+      `}
+    >
+      {/* Write-mode input handle */}
+      {isWrite && (
+        <Handle
+          type="target"
+          position={Position.Left}
+          id="value"
+          style={{ top: '50%' }}
+          className="!bg-slate-400 !border-slate-600"
+          title="value: any"
+        />
+      )}
+
+      {/* Header */}
+      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-cyan-500 border-opacity-40">
+        <span className="text-slate-300 opacity-70"><Database size={14} /></span>
+        <span className="text-[10px] font-bold text-slate-400 tracking-widest">STATE</span>
+      </div>
+
+      {/* Body */}
+      <div className="px-3 py-2">
+        <p className="text-sm font-semibold text-slate-100 truncate">{data.label}</p>
+        <p className="text-xs text-cyan-300 mt-0.5 truncate">{isWrite ? '✏️ write' : '📖 read'}: <span className="font-mono">{data.stateKey ?? '—'}</span></p>
+      </div>
+
+      {/* Output handle */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="value"
+        style={{ top: '50%' }}
+        className="!bg-slate-400 !border-slate-600"
+        title="value: any"
+      />
+    </div>
+  )
+})
+
+StateNode.displayName = 'StateNode'
 
 // ─── Note (sticky note) ──────────────────────────────────────────────────────
 

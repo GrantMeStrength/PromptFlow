@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Download, Cpu, Terminal, GitBranch, Upload, Layers, BookOpen, MessageSquare, FileText, ListChecks, Plug, StickyNote } from 'lucide-react'
+import { Download, Cpu, Terminal, GitBranch, Upload, Layers, BookOpen, MessageSquare, FileText, ListChecks, Plug, StickyNote, Database } from 'lucide-react'
 import type { NodeKind, NodeData } from '../../types'
 import { useFlowStore } from '../../store/flowStore'
 
@@ -62,6 +62,14 @@ const paletteItems: PaletteItem[] = [
     desc: 'Provides tools to an LLM via MCP',
     color: 'text-teal-400',
     bg: 'bg-teal-900/30 border-teal-700/50 hover:border-teal-500',
+  },
+  {
+    kind: 'state',
+    icon: <Database size={18} />,
+    label: 'State Variable',
+    desc: 'Persist a value between pipeline runs',
+    color: 'text-cyan-400',
+    bg: 'bg-cyan-900/30 border-cyan-700/50 hover:border-cyan-500',
   },
   {
     kind: 'note',

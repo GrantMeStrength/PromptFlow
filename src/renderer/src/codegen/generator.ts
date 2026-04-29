@@ -108,6 +108,21 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
         default: // 'text'
           lines.push(`  return __uiInputs__['${node.id}'] ?? { value: '' }`)
       }
+    } else if (node.data.kind === 'state') {
+      // State nodes read from or write to persistent storage via getState/setState injected by runtime
+      const key = (node.data.stateKey ?? 'unnamed').replace(/`/g, '\\`')
+      let defaultVal: unknown = null
+      try { defaultVal = JSON.parse(node.data.stateDefault ?? 'null') } catch { defaultVal = node.data.stateDefault ?? null }
+      const defaultExpr = JSON.stringify(defaultVal)
+      if (node.data.stateMode === 'write') {
+        lines.push(`  const _val = inputs.value !== undefined ? inputs.value : ${defaultExpr}`)
+        lines.push(`  await setState(\`${key}\`, _val)`)
+        lines.push(`  return { value: _val }`)
+      } else {
+        // read (default)
+        lines.push(`  const _stored = await getState(\`${key}\`, ${defaultExpr})`)
+        lines.push(`  return { value: _stored }`)
+      }
     } else {
       // For LLM nodes inject model + prompt template as local constants
       if (node.data.kind === 'llm') {

@@ -10,7 +10,7 @@ export interface PortDef {
 
 // ─── Node Types ───────────────────────────────────────────────────────────────
 
-export type NodeKind = 'input' | 'function' | 'llm' | 'decision' | 'output' | 'pipe' | 'ui' | 'mcp' | 'note'
+export type NodeKind = 'input' | 'function' | 'llm' | 'decision' | 'output' | 'pipe' | 'ui' | 'mcp' | 'note' | 'state'
 
 export interface NodeData {
   label: string
@@ -48,6 +48,10 @@ export interface NodeData {
   mcpArgs?: string    // one arg per line
   mcpEnv?: string     // KEY=value per line
   mcpTools?: McpToolInfo[]
+  /** For state variable nodes */
+  stateKey?: string        // persistent variable name
+  stateDefault?: string    // JSON-serialisable default value (stored as string)
+  stateMode?: 'read' | 'write'
 }
 
 export interface McpToolInfo {
@@ -125,6 +129,10 @@ export interface ElectronAPI {
   // Report export
   saveReportHtml: (html: string) => Promise<{ success: boolean; path?: string; error?: string }>
   exportReportPdf: (html: string) => Promise<{ success: boolean; path?: string; error?: string }>
+  // State variables
+  getStateVar: (key: string) => Promise<{ success: boolean; value?: unknown; error?: string }>
+  setStateVar: (key: string, value: unknown) => Promise<{ success: boolean; error?: string }>
+  clearStateVars: () => Promise<{ success: boolean; error?: string }>
 }
 
 declare global {

@@ -9,7 +9,7 @@ interface Message {
   content: string
 }
 
-const VALID_KINDS: NodeKind[] = ['input', 'function', 'llm', 'decision', 'output', 'pipe', 'ui', 'mcp']
+const VALID_KINDS: NodeKind[] = ['input', 'function', 'llm', 'decision', 'output', 'pipe', 'ui', 'mcp', 'state']
 
 const SYSTEM_PROMPT = `You are a PromptFlow Workflow Wizard. You help users design visual node-graph workflows.
 

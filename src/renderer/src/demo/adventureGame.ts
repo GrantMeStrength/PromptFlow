@@ -6,7 +6,7 @@ export function createAdventureGameDemo(): { nodes: FlowNode[]; edges: FlowEdge[
     {
       id: 'note-intro',
       type: 'note',
-      position: { x: 20, y: -180 },
+      position: { x: 20, y: -200 },
       data: {
         label: '🗺️ The Abandoned Lighthouse',
         kind: 'note',
@@ -16,25 +16,26 @@ export function createAdventureGameDemo(): { nodes: FlowNode[]; edges: FlowEdge[
         code: '',
         prompt: '',
         noteText:
-          'A text-adventure demo showing Decision node routing. Type a location — "lighthouse", "cave", or "cliff" — and the pipeline routes through a chain of Decision nodes to reach the matching scene. Only one branch carries data; the rest stay null and return empty. A Merge node picks the non-empty result.',
+          'A text-adventure demo showing Decision nodes + State nodes working together. Type a destination ("lighthouse", "cave", or "cliff") and press Run. The pipeline reads your current location from state, routes through Decision nodes, renders the matching scene, then saves your new location to state — so the next run knows where you are. Try running multiple times to explore the island.',
       },
     },
 
-    // ── Decision routing explanation note ─────────────────────────────────────
+    // ── State: read current location ──────────────────────────────────────────
     {
-      id: 'note-routing',
-      type: 'note',
-      position: { x: 500, y: -180 },
+      id: 'state-read-loc',
+      type: 'state',
+      position: { x: 20, y: 60 },
       data: {
-        label: '🔀 How Decision Routing Works',
-        kind: 'note',
-        description: '',
-        inputs: [],
-        outputs: [],
+        label: 'Current Location',
+        kind: 'state',
+        description: 'Reads the persisted current location (defaults to "beach").',
+        inputs: [{ name: 'value', type: 'any', description: 'Value to store (write mode only)' }],
+        outputs: [{ name: 'value', type: 'any', description: 'Stored value' }],
+        stateKey: 'adventureLocation',
+        stateDefault: '"beach"',
+        stateMode: 'read',
         code: '',
         prompt: '',
-        noteText:
-          'Each Decision node checks one keyword. Its TRUE handle carries the command onward; its FALSE handle passes the command to the next Decision node below. Only the matching scene function receives a non-null input and returns text. The Merge node at the end picks whichever scene has content.',
       },
     },
 
@@ -42,12 +43,12 @@ export function createAdventureGameDemo(): { nodes: FlowNode[]; edges: FlowEdge[
     {
       id: 'ui-action',
       type: 'ui',
-      position: { x: 20, y: 60 },
+      position: { x: 20, y: 240 },
       data: {
         label: 'Player Action',
         kind: 'ui',
         uiKind: 'text',
-        description: 'Type a destination: lighthouse, cave, cliff, or just explore the beach.',
+        description: 'Type a destination: lighthouse, cave, cliff, or just look around.',
         inputs: [],
         outputs: [{ name: 'value', type: 'string', description: 'Player command' }],
         code: '',
@@ -60,15 +61,19 @@ export function createAdventureGameDemo(): { nodes: FlowNode[]; edges: FlowEdge[
     {
       id: 'fn-parse',
       type: 'function',
-      position: { x: 280, y: 60 },
+      position: { x: 280, y: 140 },
       data: {
         label: 'Parse Command',
         kind: 'function',
-        description: 'Normalise the player command to lowercase for reliable matching.',
-        inputs: [{ name: 'value', type: 'string', description: 'Raw player input' }],
-        outputs: [{ name: 'result', type: 'string', description: 'Normalised command' }],
-        code: `const raw = String(inputs.value ?? '').toLowerCase().trim()
-result = raw || 'look around'`,
+        description: 'Combines current location and player command into a routing object.',
+        inputs: [
+          { name: 'location', type: 'string', description: 'Persisted location' },
+          { name: 'action', type: 'string', description: 'Raw player input' },
+        ],
+        outputs: [{ name: 'result', type: 'object', description: 'Routing object' }],
+        code: `const loc = String(inputs.location ?? 'beach').toLowerCase().trim()
+const cmd = String(inputs.action ?? '').toLowerCase().trim()
+result = { location: loc, command: cmd || 'look around' }`,
         prompt: '',
       },
     },
@@ -82,15 +87,16 @@ result = raw || 'look around'`,
         label: 'Go to Lighthouse?',
         kind: 'decision',
         description: 'Routes to the lighthouse scene if the player mentioned "lighthouse" or "light".',
-        inputs: [{ name: 'value', type: 'string', description: 'Normalised command' }],
+        inputs: [{ name: 'value', type: 'object', description: 'Routing object' }],
         outputs: [
-          { name: 'true', type: 'string', description: 'Command → lighthouse path' },
-          { name: 'false', type: 'string', description: 'Command → next decision' },
+          { name: 'true', type: 'object', description: 'Routing → lighthouse path' },
+          { name: 'false', type: 'object', description: 'Routing → next decision' },
         ],
         branches: ['true', 'false'],
-        code: `const cmd = String(inputs.value ?? '')
+        code: `const v = inputs.value || {}
+const cmd = String(v.command ?? '')
 const match = cmd.includes('lighthouse') || cmd.includes('light') || cmd === 'l'
-return match ? { true: cmd, false: null } : { true: null, false: cmd }`,
+return match ? { true: v, false: null } : { true: null, false: v }`,
         prompt: '',
       },
     },
@@ -104,15 +110,16 @@ return match ? { true: cmd, false: null } : { true: null, false: cmd }`,
         label: 'Go to Cave?',
         kind: 'decision',
         description: 'Routes to the cave scene if the player mentioned "cave" or "dark".',
-        inputs: [{ name: 'value', type: 'string', description: 'Command if lighthouse not matched' }],
+        inputs: [{ name: 'value', type: 'object', description: 'Routing object if lighthouse not matched' }],
         outputs: [
-          { name: 'true', type: 'string', description: 'Command → cave path' },
-          { name: 'false', type: 'string', description: 'Command → next decision' },
+          { name: 'true', type: 'object', description: 'Routing → cave path' },
+          { name: 'false', type: 'object', description: 'Routing → next decision' },
         ],
         branches: ['true', 'false'],
-        code: `const cmd = String(inputs.value ?? '')
+        code: `const v = inputs.value || {}
+const cmd = String(v.command ?? '')
 const match = cmd.includes('cave') || cmd.includes('dark') || cmd === 'c'
-return match ? { true: cmd, false: null } : { true: null, false: cmd }`,
+return match ? { true: v, false: null } : { true: null, false: v }`,
         prompt: '',
       },
     },
@@ -126,15 +133,16 @@ return match ? { true: cmd, false: null } : { true: null, false: cmd }`,
         label: 'Go to Cliff?',
         kind: 'decision',
         description: 'Routes to the cliff scene if the player mentioned "cliff", "view", or "sea".',
-        inputs: [{ name: 'value', type: 'string', description: 'Command if cave not matched' }],
+        inputs: [{ name: 'value', type: 'object', description: 'Routing object if cave not matched' }],
         outputs: [
-          { name: 'true', type: 'string', description: 'Command → cliff path' },
-          { name: 'false', type: 'string', description: 'Command → beach fallback' },
+          { name: 'true', type: 'object', description: 'Routing → cliff path' },
+          { name: 'false', type: 'object', description: 'Routing → beach fallback' },
         ],
         branches: ['true', 'false'],
-        code: `const cmd = String(inputs.value ?? '')
+        code: `const v = inputs.value || {}
+const cmd = String(v.command ?? '')
 const match = cmd.includes('cliff') || cmd.includes('view') || cmd.includes('sea') || cmd === 'v'
-return match ? { true: cmd, false: null } : { true: null, false: cmd }`,
+return match ? { true: v, false: null } : { true: null, false: v }`,
         prompt: '',
       },
     },
@@ -148,10 +156,14 @@ return match ? { true: cmd, false: null } : { true: null, false: cmd }`,
         label: '🔦 Lighthouse Scene',
         kind: 'function',
         description: 'Returns the lighthouse location description.',
-        inputs: [{ name: 'value', type: 'string', description: 'Command from true branch' }],
-        outputs: [{ name: 'result', type: 'string', description: 'Scene text' }],
-        code: `if (!inputs.value) return { result: '' }
-result = \`🔦  THE OLD LIGHTHOUSE
+        inputs: [{ name: 'value', type: 'object', description: 'Routing object from true branch' }],
+        outputs: [
+          { name: 'scene', type: 'string', description: 'Scene text' },
+          { name: 'nextLocation', type: 'string', description: 'New location key' },
+        ],
+        code: `if (!inputs.value) return { scene: '', nextLocation: '' }
+return {
+  scene: \`🔦  THE OLD LIGHTHOUSE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 You trudge up the sandy path toward the old stone lighthouse. Its
@@ -168,7 +180,9 @@ old Fresnel lens, dusty but intact.
 A logbook lies open on the floor. The last entry reads:
 "The light must never go out."
 
-→ Paths: cave (west)  |  cliff (east)  |  beach (south)\``,
+→ Paths: cave (west)  |  cliff (east)  |  beach (south)\`,
+  nextLocation: 'lighthouse'
+}`,
         prompt: '',
       },
     },
@@ -182,10 +196,14 @@ A logbook lies open on the floor. The last entry reads:
         label: '🦇 Cave Scene',
         kind: 'function',
         description: 'Returns the cave location description.',
-        inputs: [{ name: 'value', type: 'string', description: 'Command from true branch' }],
-        outputs: [{ name: 'result', type: 'string', description: 'Scene text' }],
-        code: `if (!inputs.value) return { result: '' }
-result = \`🦇  THE SEA CAVE
+        inputs: [{ name: 'value', type: 'object', description: 'Routing object from true branch' }],
+        outputs: [
+          { name: 'scene', type: 'string', description: 'Scene text' },
+          { name: 'nextLocation', type: 'string', description: 'New location key' },
+        ],
+        code: `if (!inputs.value) return { scene: '', nextLocation: '' }
+return {
+  scene: \`🦇  THE SEA CAVE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 The cave mouth exhales cold, briny air as you step inside. Your
@@ -203,7 +221,9 @@ and carved into it, in neat careful letters:
 
 The tide is coming in. You have perhaps twenty minutes.
 
-→ Paths: beach (east)  |  lighthouse (northeast)\``,
+→ Paths: beach (east)  |  lighthouse (northeast)\`,
+  nextLocation: 'cave'
+}`,
         prompt: '',
       },
     },
@@ -217,10 +237,14 @@ The tide is coming in. You have perhaps twenty minutes.
         label: '🌊 Cliff Scene',
         kind: 'function',
         description: 'Returns the cliff location description.',
-        inputs: [{ name: 'value', type: 'string', description: 'Command from true branch' }],
-        outputs: [{ name: 'result', type: 'string', description: 'Scene text' }],
-        code: `if (!inputs.value) return { result: '' }
-result = \`🌊  THE EAST CLIFFS
+        inputs: [{ name: 'value', type: 'object', description: 'Routing object from true branch' }],
+        outputs: [
+          { name: 'scene', type: 'string', description: 'Scene text' },
+          { name: 'nextLocation', type: 'string', description: 'New location key' },
+        ],
+        code: `if (!inputs.value) return { scene: '', nextLocation: '' }
+return {
+  scene: \`🌊  THE EAST CLIFFS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 The path ends at a ragged cliff edge. Two hundred feet below,
@@ -237,7 +261,9 @@ wildflowers on it — tied with a red ribbon, still bright.
 
 Scratched into the armrest: a date. Fifteen years ago.
 
-→ Paths: beach (west)  |  lighthouse (northwest)\``,
+→ Paths: beach (west)  |  lighthouse (northwest)\`,
+  nextLocation: 'cliff'
+}`,
         prompt: '',
       },
     },
@@ -251,18 +277,23 @@ Scratched into the armrest: a date. Fifteen years ago.
         label: '🏖️ Beach (Start)',
         kind: 'function',
         description: "Fallback scene — shown when the player's command doesn't match a known location.",
-        inputs: [{ name: 'value', type: 'string', description: 'Unmatched command' }],
-        outputs: [{ name: 'result', type: 'string', description: 'Scene text' }],
-        code: `if (!inputs.value) return { result: '' }
-const cmd = inputs.value
-result = \`🏖️  THE GREY BEACH
+        inputs: [{ name: 'value', type: 'object', description: 'Unmatched routing object' }],
+        outputs: [
+          { name: 'scene', type: 'string', description: 'Scene text' },
+          { name: 'nextLocation', type: 'string', description: 'New location key' },
+        ],
+        code: `if (!inputs.value) return { scene: '', nextLocation: '' }
+const cmd = String(inputs.value.command ?? '')
+const loc = String(inputs.value.location ?? 'beach')
+return {
+  scene: \`🏖️  THE GREY BEACH
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 "\${cmd}" — the waves crash indifferently.
 
-You stand on the grey pebble beach. The sky is the colour of old
-pewter. The sea is restless today, churning up foam that skitters
-across the stones and clings to your boots.
+You are on the grey pebble beach (previously: \${loc}). The sky is
+the colour of old pewter. The sea is restless today, churning up
+foam that skitters across the stones and clings to your boots.
 
 Three paths lead away from here:
   • NORTH — An old lighthouse stands dark on the headland.
@@ -271,7 +302,9 @@ Three paths lead away from here:
 
 A rusted sign reads: "TRESPASSERS WILL BE REMEMBERED."
 
-→ Try: "go to the lighthouse"  |  "enter the cave"  |  "climb the cliff"\``,
+→ Try: "go to the lighthouse"  |  "enter the cave"  |  "climb the cliff"\`,
+  nextLocation: 'beach'
+}`,
         prompt: '',
       },
     },
@@ -285,15 +318,41 @@ A rusted sign reads: "TRESPASSERS WILL BE REMEMBERED."
         label: 'Merge Scenes',
         kind: 'function',
         description:
-          'Picks whichever branch produced text. Only one scene carries a non-empty result; the others return empty strings.',
+          'Picks whichever branch produced text, and captures the next location for state persistence.',
         inputs: [
-          { name: 'lighthouse', type: 'string', description: 'Lighthouse scene or empty' },
-          { name: 'cave', type: 'string', description: 'Cave scene or empty' },
-          { name: 'cliff', type: 'string', description: 'Cliff scene or empty' },
-          { name: 'unknown', type: 'string', description: 'Beach scene or empty' },
+          { name: 'lighthouse', type: 'object', description: 'Lighthouse scene or empty' },
+          { name: 'cave', type: 'object', description: 'Cave scene or empty' },
+          { name: 'cliff', type: 'object', description: 'Cliff scene or empty' },
+          { name: 'unknown', type: 'object', description: 'Beach scene or empty' },
         ],
-        outputs: [{ name: 'result', type: 'string', description: 'The active scene text' }],
-        code: `result = inputs.lighthouse || inputs.cave || inputs.cliff || inputs.unknown || '❓ Unknown location.'`,
+        outputs: [
+          { name: 'scene', type: 'string', description: 'The active scene text' },
+          { name: 'nextLocation', type: 'string', description: 'Location to persist' },
+        ],
+        code: `const active = inputs.lighthouse || inputs.cave || inputs.cliff || inputs.unknown || {}
+result = {
+  scene: active.scene || '❓ Unknown location.',
+  nextLocation: active.nextLocation || 'beach'
+}`,
+        prompt: '',
+      },
+    },
+
+    // ── State: write new location ─────────────────────────────────────────────
+    {
+      id: 'state-write-loc',
+      type: 'state',
+      position: { x: 1510, y: 240 },
+      data: {
+        label: 'Save Location',
+        kind: 'state',
+        description: 'Persists the new location for the next pipeline run.',
+        inputs: [{ name: 'value', type: 'any', description: 'Location key to store' }],
+        outputs: [{ name: 'value', type: 'any', description: 'Stored value' }],
+        stateKey: 'adventureLocation',
+        stateDefault: '"beach"',
+        stateMode: 'write',
+        code: '',
         prompt: '',
       },
     },
@@ -302,7 +361,7 @@ A rusted sign reads: "TRESPASSERS WILL BE REMEMBERED."
     {
       id: 'output-story',
       type: 'output',
-      position: { x: 1510, y: 360 },
+      position: { x: 1510, y: 480 },
       data: {
         label: 'Story Output',
         kind: 'output',
@@ -316,8 +375,10 @@ A rusted sign reads: "TRESPASSERS WILL BE REMEMBERED."
   ]
 
   const edges: FlowEdge[] = [
+    // State read → parse
+    { id: 'e0', source: 'state-read-loc', target: 'fn-parse', sourceHandle: 'value', targetHandle: 'location' },
     // Player action → parse
-    { id: 'e1', source: 'ui-action', target: 'fn-parse', sourceHandle: 'value', targetHandle: 'value' },
+    { id: 'e1', source: 'ui-action', target: 'fn-parse', sourceHandle: 'value', targetHandle: 'action' },
 
     // Parse → first decision
     { id: 'e2', source: 'fn-parse', target: 'dec-lighthouse', sourceHandle: 'result', targetHandle: 'value' },
@@ -333,13 +394,16 @@ A rusted sign reads: "TRESPASSERS WILL BE REMEMBERED."
     { id: 'e8', source: 'dec-cliff', target: 'fn-cliff', sourceHandle: 'true', targetHandle: 'value' },
 
     // Scene functions → merge
-    { id: 'e9', source: 'fn-lighthouse', target: 'fn-merge', sourceHandle: 'result', targetHandle: 'lighthouse' },
-    { id: 'e10', source: 'fn-cave', target: 'fn-merge', sourceHandle: 'result', targetHandle: 'cave' },
-    { id: 'e11', source: 'fn-cliff', target: 'fn-merge', sourceHandle: 'result', targetHandle: 'cliff' },
-    { id: 'e12', source: 'fn-beach', target: 'fn-merge', sourceHandle: 'result', targetHandle: 'unknown' },
+    { id: 'e9', source: 'fn-lighthouse', target: 'fn-merge', sourceHandle: 'scene', targetHandle: 'lighthouse' },
+    { id: 'e10', source: 'fn-cave', target: 'fn-merge', sourceHandle: 'scene', targetHandle: 'cave' },
+    { id: 'e11', source: 'fn-cliff', target: 'fn-merge', sourceHandle: 'scene', targetHandle: 'cliff' },
+    { id: 'e12', source: 'fn-beach', target: 'fn-merge', sourceHandle: 'scene', targetHandle: 'unknown' },
+
+    // Merge → state write (save location)
+    { id: 'e14', source: 'fn-merge', target: 'state-write-loc', sourceHandle: 'nextLocation', targetHandle: 'value' },
 
     // Merge → output
-    { id: 'e13', source: 'fn-merge', target: 'output-story', sourceHandle: 'result', targetHandle: 'text' },
+    { id: 'e13', source: 'fn-merge', target: 'output-story', sourceHandle: 'scene', targetHandle: 'text' },
   ]
 
   return { nodes, edges }

@@ -9,7 +9,7 @@ import ReactFlow, {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { useFlowStore } from '../../store/flowStore'
-import { InputNode, FunctionNode, LLMNode, DecisionNode, OutputNode, PipeNode, UINode, MCPNode, NoteNode } from './nodes/NodeTypes'
+import { InputNode, FunctionNode, LLMNode, DecisionNode, OutputNode, PipeNode, UINode, MCPNode, NoteNode, StateNode } from './nodes/NodeTypes'
 import { GradientEdge } from './edges/GradientEdge'
 
 const nodeTypes: NodeTypes = {
@@ -22,6 +22,7 @@ const nodeTypes: NodeTypes = {
   ui: UINode,
   mcp: MCPNode,
   note: NoteNode,
+  state: StateNode,
 }
 
 const edgeTypes: EdgeTypes = {
@@ -38,6 +39,7 @@ const minimapNodeColor = (node: { type?: string }) => {
     pipe: '#06b6d4',
     ui: '#d946ef',
     mcp: '#14b8a6',
+    state: '#22d3ee',
     note: '#eab308',
   }
   return colors[node.type ?? 'function'] ?? '#6366f1'
