@@ -329,11 +329,10 @@ A rusted sign reads: "TRESPASSERS WILL BE REMEMBERED."
           { name: 'scene', type: 'string', description: 'The active scene text' },
           { name: 'nextLocation', type: 'string', description: 'Location to persist' },
         ],
-        code: `const active = inputs.lighthouse || inputs.cave || inputs.cliff || inputs.unknown || {}
-result = {
-  scene: active.scene || '❓ Unknown location.',
-  nextLocation: active.nextLocation || 'beach'
-}`,
+        code: `// inputs.lighthouse/cave/cliff/unknown are scene strings (extracted via sourceHandle)
+const scene = inputs.lighthouse || inputs.cave || inputs.cliff || inputs.unknown || '❓ Unknown location.'
+const nextLocation = inputs.lighthouse ? 'lighthouse' : inputs.cave ? 'cave' : inputs.cliff ? 'cliff' : 'beach'
+result = { scene, nextLocation }`,
         prompt: '',
       },
     },
