@@ -183,8 +183,14 @@ export function WizardPanel({ onClose }: WizardPanelProps) {
 
   const analyzeGraph = () => {
     if (nodes.length === 0) return
-    const desc = serializeGraph(nodes, edges)
-    sendMessage(`Please analyse my current workflow and identify any potential issues:\n\n${desc}`, ANALYSIS_SYSTEM_PROMPT)
+    try {
+      const desc = serializeGraph(nodes, edges)
+      // Graph data goes into the system prompt so it doesn't bloat the chat UI
+      const systemWithGraph = `${ANALYSIS_SYSTEM_PROMPT}\n\nHere is the workflow to analyse:\n\n${desc}`
+      sendMessage('Please analyse my current workflow and identify any potential issues.', systemWithGraph)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to serialise graph')
+    }
   }
 
   const handleApply = () => {
@@ -230,7 +236,7 @@ export function WizardPanel({ onClose }: WizardPanelProps) {
               <img
                 src={wizardImg}
                 alt="Wizard"
-                className="w-48 object-contain drop-shadow-[0_8px_24px_rgba(99,60,220,0.35)]"
+                className="w-24 object-contain drop-shadow-[0_8px_24px_rgba(99,60,220,0.35)]"
               />
               <p className="font-medium text-slate-300 text-base">Describe a workflow</p>
               <p className="text-[12px] text-slate-500 max-w-[280px] leading-relaxed">I'll ask a few questions, then generate a graph you can apply to the canvas.</p>
