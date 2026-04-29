@@ -429,8 +429,8 @@ export const NoteNode = memo(({ id, data, selected }: NodeProps<NodeData>) => {
         className="w-full bg-transparent text-yellow-100/80 text-xs resize-none outline-none placeholder:text-yellow-700/60 leading-relaxed nodrag nowheel"
         rows={4}
         placeholder="Add a note…"
-        value={data.description ?? ''}
-        onChange={e => updateNodeData(id, { description: e.target.value })}
+        value={data.noteText ?? ''}
+        onChange={e => updateNodeData(id, { noteText: e.target.value })}
         onClick={e => e.stopPropagation()}
       />
     </div>
