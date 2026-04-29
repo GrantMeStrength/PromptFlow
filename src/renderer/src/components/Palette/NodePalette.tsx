@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Download, Cpu, Terminal, GitBranch, Upload, Layers, BookOpen, MessageSquare, FileText, ListChecks, Plug } from 'lucide-react'
+import { Download, Cpu, Terminal, GitBranch, Upload, Layers, BookOpen, MessageSquare, FileText, ListChecks, Plug, StickyNote } from 'lucide-react'
 import type { NodeKind, NodeData } from '../../types'
 import { useFlowStore } from '../../store/flowStore'
 
@@ -62,6 +62,14 @@ const paletteItems: PaletteItem[] = [
     desc: 'Provides tools to an LLM via MCP',
     color: 'text-teal-400',
     bg: 'bg-teal-900/30 border-teal-700/50 hover:border-teal-500',
+  },
+  {
+    kind: 'note',
+    icon: <StickyNote size={18} />,
+    label: 'Sticky Note',
+    desc: 'Free-floating annotation, optionally connectable',
+    color: 'text-yellow-400',
+    bg: 'bg-yellow-900/30 border-yellow-700/50 hover:border-yellow-500',
   },
 ]
 

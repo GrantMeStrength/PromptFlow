@@ -12,22 +12,32 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  border: 2px solid #fff;
+  border: 2px solid rgba(255,255,255,0.15);
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.react-flow__handle:hover {
+  transform: scale(1.4);
+  box-shadow: 0 0 6px currentColor;
 }
 
 .react-flow__edge-path {
   stroke-width: 2;
 }
+/* Slightly softer edges */
+.react-flow__edge.animated .react-flow__edge-path {
+  filter: drop-shadow(0 0 3px rgba(99,102,241,0.35));
+}
 
-/* Node selection ring */
-.react-flow__node.selected > div {
-  box-shadow: 0 0 0 2px #6366f1;
+/* Canvas pane background */
+.react-flow__pane {
+  cursor: default !important;
 }
 
 /* Scrollbar styling */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #1e1e2e; }
-::-webkit-scrollbar-thumb { background: #3f3f5a; border-radius: 3px; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #3a3a54; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #5050780; }
 
 /* Electron window drag regions */
 .drag-region   { -webkit-app-region: drag; }
@@ -47,5 +57,27 @@
 }
 .toolbar-btn:hover {
   color: white;
-  background-color: rgba(255,255,255,0.05);
+  background-color: rgba(255,255,255,0.06);
+}
+.toolbar-btn:active {
+  background-color: rgba(255,255,255,0.1);
+}
+
+/* Node glow on hover */
+.react-flow__node:hover > div {
+  filter: brightness(1.08);
+}
+
+/* Gradient edge flow animation */
+@keyframes edge-flow {
+  from { stroke-dashoffset: 20; }
+  to   { stroke-dashoffset: 0;  }
+}
+.edge-flow-animated {
+  animation: edge-flow 0.6s linear infinite;
+}
+
+/* Override ReactFlow's default edge drop shadow with our gradient approach */
+.react-flow__edge-path {
+  filter: none;
 }

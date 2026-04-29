@@ -5,10 +5,12 @@ import ReactFlow, {
   MiniMap,
   BackgroundVariant,
   type NodeTypes,
+  type EdgeTypes,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { useFlowStore } from '../../store/flowStore'
-import { InputNode, FunctionNode, LLMNode, DecisionNode, OutputNode, PipeNode, UINode, MCPNode } from './nodes/NodeTypes'
+import { InputNode, FunctionNode, LLMNode, DecisionNode, OutputNode, PipeNode, UINode, MCPNode, NoteNode } from './nodes/NodeTypes'
+import { GradientEdge } from './edges/GradientEdge'
 
 const nodeTypes: NodeTypes = {
   input: InputNode,
@@ -19,6 +21,11 @@ const nodeTypes: NodeTypes = {
   pipe: PipeNode,
   ui: UINode,
   mcp: MCPNode,
+  note: NoteNode,
+}
+
+const edgeTypes: EdgeTypes = {
+  gradient: GradientEdge,
 }
 
 const minimapNodeColor = (node: { type?: string }) => {
@@ -31,6 +38,7 @@ const minimapNodeColor = (node: { type?: string }) => {
     pipe: '#06b6d4',
     ui: '#d946ef',
     mcp: '#14b8a6',
+    note: '#eab308',
   }
   return colors[node.type ?? 'function'] ?? '#6366f1'
 }
@@ -47,13 +55,14 @@ export function FlowCanvas() {
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onPaneClick={handlePaneClick}
         fitView
         fitViewOptions={{ padding: 0.3 }}
-        defaultEdgeOptions={{ animated: true, style: { stroke: '#4f4f6f', strokeWidth: 2 } }}
+        defaultEdgeOptions={{ type: 'gradient', animated: true, style: { strokeWidth: 2 } }}
         deleteKeyCode="Delete"
         proOptions={{ hideAttribution: true }}
       >

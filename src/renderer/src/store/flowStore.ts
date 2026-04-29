@@ -128,6 +128,13 @@ const defaultNodeData = (kind: NodeKind): NodeData => {
       mcpEnv: '',
       code: `// MCP Server node – provides tools to connected LLM nodes`,
     },
+    note: {
+      label: 'Note',
+      description: '',
+      inputs: [],
+      outputs: [],
+      code: '',
+    },
   }
   return {
     kind,
@@ -181,7 +188,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     }
     const pipeNode: FlowNode = { id: pipeId, type: 'pipe', position: { x: midX, y: midY }, data: pipeData }
 
-    const edgeStyle = { animated: true, style: { stroke: '#06b6d4', strokeWidth: 1.5, strokeDasharray: '4 3' } }
+    const edgeStyle = { type: 'gradient', animated: true, style: { strokeWidth: 1.5, strokeDasharray: '4 3' } }
     const edgeIn: FlowEdge = {
       id: `e-${connection.source}-${pipeId}`,
       source: connection.source,

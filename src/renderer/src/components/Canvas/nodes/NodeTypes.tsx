@@ -1,8 +1,8 @@
-import React, { memo } from 'react'
+import React, { memo, useState } from 'react'
 import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 import type { NodeData } from '../../../types'
-import { Download, Upload, Cpu, GitBranch, Terminal, ArrowRightLeft, MessageSquare, FileText, ListChecks, Plug } from 'lucide-react'
+import { Download, Upload, Cpu, GitBranch, Terminal, ArrowRightLeft, MessageSquare, FileText, ListChecks, Plug, StickyNote } from 'lucide-react'
 import { useFlowStore } from '../../../store/flowStore'
 
 // ─── Shared node styles ───────────────────────────────────────────────────────
@@ -377,3 +377,68 @@ InputNode.displayName = 'InputNode'
 FunctionNode.displayName = 'FunctionNode'
 DecisionNode.displayName = 'DecisionNode'
 OutputNode.displayName = 'OutputNode'
+
+// ─── Note (sticky note) ──────────────────────────────────────────────────────
+
+export const NoteNode = memo(({ id, data, selected }: NodeProps<NodeData>) => {
+  const { updateNodeData, selectNode } = useFlowStore()
+  const [editing, setEditing] = useState(false)
+
+  return (
+    <div
+      onClick={() => selectNode(id)}
+      style={{
+        // Folded-corner shape via clip-path
+        clipPath: 'polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%)',
+        minWidth: 160,
+        minHeight: 90,
+      }}
+      className={`relative bg-yellow-900/70 border ${selected ? 'border-yellow-400' : 'border-yellow-600/60'} rounded-lg shadow-lg p-3 cursor-pointer nodrag`}
+    >
+      {/* Fold triangle */}
+      <div
+        className="absolute top-0 right-0 w-[14px] h-[14px] bg-yellow-950/80"
+        style={{ clipPath: 'polygon(100% 0, 0 0, 100% 100%)' }}
+      />
+
+      {/* Optional connection handles — subtle since notes aren't functional nodes */}
+      <Handle type="target" position={Position.Left}
+        className="!w-2 !h-2 !bg-yellow-500/50 !border-yellow-400/40" />
+      <Handle type="source" position={Position.Right}
+        className="!w-2 !h-2 !bg-yellow-500/50 !border-yellow-400/40" />
+
+      {/* Title */}
+      {editing ? (
+        <input
+          autoFocus
+          className="w-full bg-transparent text-yellow-200 font-semibold text-xs outline-none border-b border-yellow-500/40 mb-1 pb-0.5"
+          value={data.label}
+          onChange={e => updateNodeData(id, { label: e.target.value })}
+          onBlur={() => setEditing(false)}
+          onKeyDown={e => { if (e.key === 'Enter') setEditing(false) }}
+          onClick={e => e.stopPropagation()}
+        />
+      ) : (
+        <div
+          className="text-yellow-200 font-semibold text-xs mb-1.5 truncate"
+          onDoubleClick={e => { e.stopPropagation(); setEditing(true) }}
+          title="Double-click to rename"
+        >
+          {data.label || 'Note'}
+        </div>
+      )}
+
+      {/* Body text */}
+      <textarea
+        className="w-full bg-transparent text-yellow-100/80 text-xs resize-none outline-none placeholder:text-yellow-700/60 leading-relaxed nodrag nowheel"
+        rows={4}
+        placeholder="Add a note…"
+        value={data.description ?? ''}
+        onChange={e => updateNodeData(id, { description: e.target.value })}
+        onClick={e => e.stopPropagation()}
+      />
+    </div>
+  )
+})
+
+NoteNode.displayName = 'NoteNode'

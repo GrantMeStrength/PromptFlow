@@ -34,6 +34,8 @@ const kindColors: Record<NodeKind, string> = {
   output: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
   pipe: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
   ui: 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/40',
+  mcp: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
+  note: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40',
 }
 
 function PortList({ ports, label }: { ports: PortDef[]; label: string }) {
@@ -208,6 +210,28 @@ export function NodeInspector() {
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+
+        {/* Note node — just a large text area, no code/ports */}
+        {data.kind === 'note' && (
+          <div>
+            <label className="text-[11px] uppercase tracking-widest text-slate-500 block mb-1.5">
+              Note Content
+            </label>
+            <textarea
+              className="w-full bg-yellow-950/30 text-yellow-100/80 text-xs rounded-lg p-2.5 border border-yellow-700/30 focus:border-yellow-500/60 outline-none resize-none leading-relaxed"
+              rows={14}
+              placeholder="Add a note…"
+              value={data.description ?? ''}
+              onChange={(e) => updateNodeData(node.id, { description: e.target.value })}
+            />
+            <p className="text-[10px] text-slate-600 mt-1.5">
+              You can also edit the note directly on the canvas.
+            </p>
+          </div>
+        )}
+
+        {/* All other nodes */}
+        {data.kind !== 'note' && (<>
 
         {/* Auto-generating banner */}
         {refining && data.kind === 'pipe' && (
@@ -588,6 +612,9 @@ export function NodeInspector() {
             )}
           </div>
         )}
+
+        {/* end data.kind !== 'note' */}
+        </>)}
       </div>
 
       {/* Footer */}
