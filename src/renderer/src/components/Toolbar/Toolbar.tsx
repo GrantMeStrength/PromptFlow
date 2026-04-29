@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import {
-  Play, Square, FilePlus, FolderOpen, Save, Code2,
+  Play, Square, FilePlus, FolderOpen, Upload, Save, Download, Package, Code2,
   Loader2, ChevronDown, ChevronUp, Settings, BookOpen,
   Library, Sparkles,
 } from 'lucide-react'
@@ -74,13 +74,18 @@ export function Toolbar({ showOutput, onToggleOutput, showCode, onToggleCode, on
   const [saving, setSaving] = useState(false)
   const [savingLib, setSavingLib] = useState(false)
   const [showExamples, setShowExamples] = useState(false)
+  const [showExport, setShowExport] = useState(false)
   const examplesRef = useRef<HTMLDivElement>(null)
+  const exportRef = useRef<HTMLDivElement>(null)
 
-  // Close examples dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (examplesRef.current && !examplesRef.current.contains(e.target as Node)) {
         setShowExamples(false)
+      }
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setShowExport(false)
       }
     }
     document.addEventListener('mousedown', handler)
@@ -162,14 +167,60 @@ export function Toolbar({ showOutput, onToggleOutput, showCode, onToggleCode, on
         <FilePlus size={15} />
         <span>New</span>
       </button>
-      <button onClick={handleOpen} className="toolbar-btn" title="Open project">
-        <FolderOpen size={15} />
-        <span>Open</span>
-      </button>
-      <button onClick={handleSave} disabled={saving} className="toolbar-btn" title="Save project">
-        {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-        <span>Save</span>
-      </button>
+
+      {/* Import / Export dropdown */}
+      <div ref={exportRef} className="no-drag relative">
+        <button
+          onClick={() => setShowExport((v) => !v)}
+          className={`toolbar-btn ${showExport ? 'text-indigo-300' : ''}`}
+          title="Import or export a project file"
+        >
+          {saving ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+          <span>Transfer</span>
+          {showExport ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+        </button>
+        {showExport && (
+          <div className="absolute top-full left-0 mt-1 w-60 bg-[#13131f] border border-[#2a2a3f] rounded-xl shadow-2xl z-50 overflow-hidden">
+            <div className="px-3 py-2 text-[10px] uppercase tracking-widest text-slate-500 border-b border-[#2a2a3f]">
+              Import
+            </div>
+            <button
+              onClick={async () => { setShowExport(false); await handleOpen() }}
+              className="w-full flex items-start gap-2.5 px-3 py-2.5 hover:bg-[#1e1e2e] transition-colors text-left border-b border-[#2a2a3f]"
+            >
+              <Upload size={14} className="mt-0.5 text-slate-400 shrink-0" />
+              <div>
+                <div className="text-xs font-medium text-slate-200">Import Project File…</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Open a .promptflow file from disk</div>
+              </div>
+            </button>
+            <div className="px-3 py-2 text-[10px] uppercase tracking-widest text-slate-500 border-b border-[#2a2a3f]">
+              Export
+            </div>
+            <button
+              onClick={async () => { setShowExport(false); await handleSave() }}
+              className="w-full flex items-start gap-2.5 px-3 py-2.5 hover:bg-[#1e1e2e] transition-colors text-left border-b border-[#1a1a2a]"
+            >
+              <Download size={14} className="mt-0.5 text-slate-400 shrink-0" />
+              <div>
+                <div className="text-xs font-medium text-slate-200">Export Project File…</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Save a .promptflow file anywhere</div>
+              </div>
+            </button>
+            <button
+              disabled
+              className="w-full flex items-start gap-2.5 px-3 py-2.5 opacity-40 cursor-not-allowed text-left"
+              title="Coming soon"
+            >
+              <Package size={14} className="mt-0.5 text-slate-400 shrink-0" />
+              <div>
+                <div className="text-xs font-medium text-slate-200">Export as Executable…</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Generate a standalone app (coming soon)</div>
+              </div>
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Library */}
       <button onClick={onOpenLibrary} className="toolbar-btn" title="Project library">
