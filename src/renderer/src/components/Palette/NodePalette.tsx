@@ -612,7 +612,7 @@ export function NodePalette() {
                 : 'border-transparent text-slate-500 hover:text-slate-300'
             }`}
           >
-            <BookOpen size={13} /> Library
+            <BookOpen size={13} /> Snippets
           </button>
         </div>
       </div>

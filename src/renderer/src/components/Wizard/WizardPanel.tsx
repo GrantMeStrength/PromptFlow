@@ -4,6 +4,21 @@ import type { FlowNode, FlowEdge, NodeKind } from '../../types'
 import { useFlowStore } from '../../store/flowStore'
 import wizardImg from '../../assets/wizard.png'
 
+/** Renders a string with inline **bold**, *italic*, and `code` markdown as React elements. */
+function renderMarkdown(text: string): React.ReactNode {
+  // Split on bold, italic, and inline-code patterns (capturing group keeps delimiters in result)
+  const segments = text.split(/(\*\*[^*\n]+\*\*|\*[^*\n]+\*|`[^`\n]+`)/)
+  return segments.map((seg, i) => {
+    if (seg.startsWith('**') && seg.endsWith('**') && seg.length > 4)
+      return <strong key={i} className="font-semibold text-white">{seg.slice(2, -2)}</strong>
+    if (seg.startsWith('*') && seg.endsWith('*') && seg.length > 2 && !seg.startsWith('**'))
+      return <em key={i}>{seg.slice(1, -1)}</em>
+    if (seg.startsWith('`') && seg.endsWith('`') && seg.length > 2)
+      return <code key={i} className="bg-[#0d0d1a] px-1 rounded text-xs font-mono text-amber-300">{seg.slice(1, -1)}</code>
+    return seg
+  })
+}
+
 interface Message {
   role: 'user' | 'assistant'
   content: string

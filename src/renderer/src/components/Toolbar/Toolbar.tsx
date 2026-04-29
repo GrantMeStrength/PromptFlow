@@ -183,7 +183,7 @@ export function Toolbar({ showOutput, onToggleOutput, showCode, onToggleCode, on
           onClick={handleSaveToLibrary}
           disabled={savingLib}
           className="toolbar-btn text-amber-300"
-          title="Save to library"
+          title="Save project to Library (~/Documents/PromptFlow)"
         >
           {savingLib ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
           <span>Save to Library</span>
