@@ -1,5 +1,5 @@
-import React from 'react'
-import { X } from 'lucide-react'
+import React, { useState } from 'react'
+import { X, FileDown, FileText } from 'lucide-react'
 import { useFlowStore } from '../../store/flowStore'
 
 interface OutputPanelProps {
@@ -8,6 +8,27 @@ interface OutputPanelProps {
 
 export function OutputPanel({ onClose }: OutputPanelProps) {
   const { runOutput, runOutputIsHtml, clearOutput, isRunning } = useFlowStore()
+  const [exporting, setExporting] = useState<'html' | 'pdf' | null>(null)
+
+  const handleSaveHtml = async () => {
+    if (!runOutput) return
+    setExporting('html')
+    try {
+      await window.electronAPI?.saveReportHtml(runOutput)
+    } finally {
+      setExporting(null)
+    }
+  }
+
+  const handleExportPdf = async () => {
+    if (!runOutput) return
+    setExporting('pdf')
+    try {
+      await window.electronAPI?.exportReportPdf(runOutput)
+    } finally {
+      setExporting(null)
+    }
+  }
 
   return (
     <div className="h-64 bg-[#080810] border-t border-[#2a2a3f] flex flex-col font-mono">
@@ -17,6 +38,28 @@ export function OutputPanel({ onClose }: OutputPanelProps) {
           <span className="text-[11px] uppercase tracking-widest text-slate-500">Pipeline Output</span>
         </div>
         <div className="flex items-center gap-3">
+          {runOutputIsHtml && (
+            <>
+              <button
+                onClick={handleSaveHtml}
+                disabled={exporting !== null}
+                title="Save as HTML"
+                className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-blue-400 transition-colors disabled:opacity-40"
+              >
+                <FileText size={13} />
+                <span>HTML</span>
+              </button>
+              <button
+                onClick={handleExportPdf}
+                disabled={exporting !== null}
+                title="Export as PDF"
+                className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-blue-400 transition-colors disabled:opacity-40"
+              >
+                <FileDown size={13} />
+                <span>{exporting === 'pdf' ? 'Exporting…' : 'PDF'}</span>
+              </button>
+            </>
+          )}
           <button
             onClick={clearOutput}
             className="text-[11px] text-slate-500 hover:text-slate-300 transition-colors"

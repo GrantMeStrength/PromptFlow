@@ -122,6 +122,9 @@ export interface ElectronAPI {
   saveToLibrary: (project: FlowProject) => Promise<{ success: boolean; path?: string; error?: string }>
   deleteProject: (filePath: string) => Promise<{ success: boolean; error?: string }>
   openProjectByPath: (filePath: string) => Promise<{ success: boolean; project?: FlowProject; error?: string }>
+  // Report export
+  saveReportHtml: (html: string) => Promise<{ success: boolean; path?: string; error?: string }>
+  exportReportPdf: (html: string) => Promise<{ success: boolean; path?: string; error?: string }>
 }
 
 declare global {

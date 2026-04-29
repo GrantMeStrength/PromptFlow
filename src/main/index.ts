@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, Menu, protocol } from 'electron'
 import path from 'path'
 import fs from 'fs'
+import os from 'os'
 import vm from 'vm'
 import { spawn, ChildProcess } from 'child_process'
 
@@ -591,6 +592,74 @@ ipcMain.handle('open-project-by-path', async (_event, filePath: string) => {
     return { success: true, project }
   } catch (err) {
     return { success: false, error: (err as Error).message }
+  }
+})
+
+const REPORT_WRAPPER = (body: string) => `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+  @page { margin: 2cm; }
+  body { font-family: Georgia, serif; font-size: 14px; color: #1a1a1a; line-height: 1.7; max-width: 800px; margin: 0 auto; padding: 2em; }
+  h1, h2, h3 { font-family: 'Helvetica Neue', sans-serif; }
+  h1 { font-size: 2em; border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+  h2 { font-size: 1.4em; margin-top: 1.8em; color: #2a4a7f; }
+  table { border-collapse: collapse; width: 100%; margin: 1.2em 0; }
+  th { background: #2a4a7f; color: white; padding: 8px 12px; text-align: left; }
+  td { padding: 7px 12px; border-bottom: 1px solid #ddd; }
+  tr:nth-child(even) td { background: #f5f7fa; }
+  .bar-container { background: #eee; border-radius: 4px; margin: 4px 0; }
+  .bar-fill { background: linear-gradient(90deg, #2a4a7f, #5b8ff9); border-radius: 4px; height: 22px; display: flex; align-items: center; padding-left: 8px; color: white; font-size: 12px; }
+  pre, code { background: #f4f4f4; padding: 0.2em 0.4em; border-radius: 3px; font-size: 13px; }
+  blockquote { border-left: 4px solid #5b8ff9; margin: 1em 0; padding: 0.5em 1em; background: #f0f4ff; }
+</style>
+</head>
+<body>
+${body}
+</body>
+</html>`
+
+ipcMain.handle('save-report-html', async (_event, htmlContent: string) => {
+  try {
+    const { filePath, canceled } = await dialog.showSaveDialog({
+      defaultPath: 'report.html',
+      filters: [{ name: 'HTML Document', extensions: ['html'] }],
+    })
+    if (canceled || !filePath) return { success: false }
+    fs.writeFileSync(filePath, REPORT_WRAPPER(htmlContent))
+    return { success: true, path: filePath }
+  } catch (err) {
+    return { success: false, error: (err as Error).message }
+  }
+})
+
+ipcMain.handle('export-report-pdf', async (_event, htmlContent: string) => {
+  const { filePath, canceled } = await dialog.showSaveDialog({
+    defaultPath: 'report.pdf',
+    filters: [{ name: 'PDF Document', extensions: ['pdf'] }],
+  })
+  if (canceled || !filePath) return { success: false }
+
+  const tmpPath = path.join(os.tmpdir(), `pf-report-${Date.now()}.html`)
+  let pdfWin: BrowserWindow | null = null
+  try {
+    fs.writeFileSync(tmpPath, REPORT_WRAPPER(htmlContent))
+    pdfWin = new BrowserWindow({ show: false, webPreferences: { javascript: false } })
+    await pdfWin.loadFile(tmpPath)
+    const pdfBuffer = await pdfWin.webContents.printToPDF({
+      printBackground: true,
+      pageSize: 'A4',
+      margins: { marginType: 'custom', top: 0, bottom: 0, left: 0, right: 0 },
+    })
+    fs.writeFileSync(filePath, pdfBuffer)
+    return { success: true, path: filePath }
+  } catch (err) {
+    return { success: false, error: (err as Error).message }
+  } finally {
+    if (pdfWin && !pdfWin.isDestroyed()) pdfWin.destroy()
+    try { fs.unlinkSync(tmpPath) } catch { /* best effort */ }
   }
 })
 

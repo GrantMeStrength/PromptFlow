@@ -22,6 +22,9 @@ const api: ElectronAPI = {
   saveToLibrary: (project) => ipcRenderer.invoke('save-to-library', project),
   deleteProject: (filePath) => ipcRenderer.invoke('delete-project', filePath),
   openProjectByPath: (filePath) => ipcRenderer.invoke('open-project-by-path', filePath),
+  // Report export
+  saveReportHtml: (html: string) => ipcRenderer.invoke('save-report-html', html),
+  exportReportPdf: (html: string) => ipcRenderer.invoke('export-report-pdf', html),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

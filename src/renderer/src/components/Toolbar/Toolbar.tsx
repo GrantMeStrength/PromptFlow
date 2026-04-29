@@ -11,6 +11,7 @@ import { codeReviewProject } from '../../demo/codeReview'
 import { meetingNotesProject } from '../../demo/meetingNotes'
 import { dataMapperProject } from '../../demo/dataMapper'
 import { barChartProject } from '../../demo/barChart'
+import { reportGeneratorDemo } from '../../demo/reportGenerator'
 import type { FlowProject } from '../../types'
 
 const EXAMPLES: { label: string; description: string; project: FlowProject }[] = [
@@ -43,6 +44,11 @@ const EXAMPLES: { label: string; description: string; project: FlowProject }[] =
     label: 'Survey Bar Chart',
     description: 'Topic + options → LLM data → HTML chart',
     project: barChartProject,
+  },
+  {
+    label: 'Research Report',
+    description: 'Topic → LLM content → styled HTML report (save as HTML or PDF)',
+    project: reportGeneratorDemo,
   },
 ]
 
