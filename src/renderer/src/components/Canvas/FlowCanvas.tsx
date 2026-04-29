@@ -50,7 +50,7 @@ export function FlowCanvas() {
   const handlePaneClick = useCallback(() => selectNode(null), [selectNode])
 
   return (
-    <div className="flex-1 h-full bg-[#0f0f1a]">
+    <div className="flex-1 h-full bg-[#0f0f1a] canvas-texture">
       <ReactFlow
         nodes={nodes}
         edges={edges}
