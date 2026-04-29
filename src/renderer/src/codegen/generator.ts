@@ -61,7 +61,7 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
   // Map: targetNodeId → { targetHandle → { sourceNodeId, sourceHandle } }
   // Only for edges between exec (non-mcp) nodes
   const execIds = new Set(sorted.map(n => n.id))
-  const inputSources = new Map<string, Map<string, { srcId: string; handle: string }>>()
+  const inputSources = new Map<string, Map<string, { srcId: string; handle: string; explicit: boolean }>>()
   // Separately track which MCP nodes feed into each LLM node
   const mcpSources = new Map<string, NodeData[]>() // llmNodeId → mcp NodeData[]
 
@@ -76,7 +76,16 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
     } else if (execIds.has(e.source) && execIds.has(e.target)) {
       // Data edge between exec nodes
       if (!inputSources.has(e.target)) inputSources.set(e.target, new Map())
-      inputSources.get(e.target)!.set(e.targetHandle ?? 'value', { srcId: e.source, handle: e.sourceHandle ?? 'result' })
+      inputSources.get(e.target)!.set(
+        e.targetHandle ?? 'value',
+        {
+          srcId: e.source,
+          handle: e.sourceHandle ?? 'result',
+          // explicit = edge had a real sourceHandle (not defaulted), meaning the source
+          // node returns an object and we should use ONLY that key (e.g. Decision branches).
+          explicit: e.sourceHandle != null,
+        }
+      )
     }
   }
 
@@ -184,9 +193,16 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
       if (node.data.kind === 'input') {
         inputParts.push(`...initialInput`)
       } else if (sources) {
-        for (const [targetHandle, { srcId, handle }] of sources) {
+        for (const [targetHandle, { srcId, handle, explicit }] of sources) {
           const srcFn = `results["${srcId}"]`
-          inputParts.push(`"${targetHandle}": ${srcFn}?.["${handle}"] ?? ${srcFn}`)
+          // If the edge had an explicit sourceHandle (e.g. Decision 'true'/'false'),
+          // use it directly — do NOT fall back to the whole result, because Decision
+          // nodes intentionally return null for the inactive branch.
+          if (explicit) {
+            inputParts.push(`"${targetHandle}": ${srcFn}?.["${handle}"]`)
+          } else {
+            inputParts.push(`"${targetHandle}": ${srcFn}?.["${handle}"] ?? ${srcFn}`)
+          }
         }
       }
       const inputsExpr = `{ ${inputParts.join(', ')} }`
