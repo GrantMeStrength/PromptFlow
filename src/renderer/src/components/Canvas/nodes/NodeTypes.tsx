@@ -401,11 +401,7 @@ export const NoteNode = memo(({ id, data, selected }: NodeProps<NodeData>) => {
         style={{ clipPath: 'polygon(100% 0, 0 0, 100% 100%)' }}
       />
 
-      {/* Optional connection handles — subtle since notes aren't functional nodes */}
-      <Handle type="target" position={Position.Left}
-        className="!w-2 !h-2 !bg-yellow-500/50 !border-yellow-400/40" />
-      <Handle type="source" position={Position.Right}
-        className="!w-2 !h-2 !bg-yellow-500/50 !border-yellow-400/40" />
+      {/* No connection handles — sticky notes are purely decorative */}
 
       {/* Title */}
       {editing ? (

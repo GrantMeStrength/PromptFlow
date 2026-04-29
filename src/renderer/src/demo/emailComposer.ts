@@ -144,7 +144,7 @@ return {
         outputs: [],
         code: '',
         prompt: '',
-        noteText: 'The "Add Metadata" function node doesn\'t change the email text — it wraps it with useful extras: word count, estimated reading time (at 200 wpm), and a timestamp. This pattern is useful any time you want to attach computed properties to an LLM result before passing it downstream.',
+        noteText: 'The "Add Metadata" function node does not change the email text — it wraps it with computed properties: word count, estimated reading time (at 200 words per minute), and a UTC timestamp. This post-processing pattern is useful whenever you want to attach analytics or provenance data to an LLM result before passing it to an output or storage node. The final Output node receives an object with both the email body and its metadata, then unwraps the email text for clean display.',
       },
     },
   ],

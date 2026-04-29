@@ -157,7 +157,7 @@ return {
         outputs: [],
         code: '',
         prompt: '',
-        noteText: 'Both LLM nodes receive the same meeting notes but have different system prompts and goals. "Extract Action Items" identifies concrete next steps and owners, while "Executive Summary" writes a concise narrative. Splitting responsibilities across specialised LLM nodes usually gives sharper results than asking one node to do everything.',
+        noteText: 'Both LLM nodes receive the same raw meeting transcript but have different system prompts and objectives. "Extract Action Items" scans for commitments, owners, and deadlines, returning a structured list. "Executive Summary" writes a concise narrative overview. Splitting responsibilities across specialised nodes produces sharper, more focused results than asking a single prompt to do everything. The Format Output node merges both responses into a clean document with clear sections — a pattern that works well for any multi-perspective analysis.',
       },
     },
   ],
