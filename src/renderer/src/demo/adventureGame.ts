@@ -143,36 +143,30 @@ const cmd = raw.replace(/^(go\\s+to|travel\\s+to|head\\s+to|move\\s+to|enter|wal
 
 // "look", "help", or empty → stay
 if (!cmd || cmd === 'look' || cmd === 'l' || cmd === 'help' || cmd === '?') {
-  result = { nextLocation: loc, message: '' }
-  return
+  return { nextLocation: loc, message: '' }
 }
 
 const exits = EXITS[loc] || {}
 
 // 1. Try exact direction match
 if (exits[cmd]) {
-  result = { nextLocation: exits[cmd], message: '' }
-  return
+  return { nextLocation: exits[cmd], message: '' }
 }
 
 // 2. Try place name in command
 for (const [keyword, place] of Object.entries(PLACE_NAMES)) {
   if (cmd.includes(keyword)) {
-    // Only allow if there is actually an exit to that place from here
     const canGo = Object.values(exits).includes(place)
     if (canGo || place === loc) {
-      result = { nextLocation: place, message: '' }
-      return
+      return { nextLocation: place, message: '' }
     }
-    // Named place exists but no path from here
-    result = { nextLocation: loc, message: \`You can't reach the \${place} directly from here.\` }
-    return
+    return { nextLocation: loc, message: \`You can't reach the \${place} directly from here.\` }
   }
 }
 
 // 3. No match → stay, report invalid move
 const exitList = Object.keys(exits).filter(k => k.length > 1).join(', ')
-result = { nextLocation: loc, message: \`"\${raw}" — you can't go that way. Exits: \${exitList || 'none'}.\` }`,
+return { nextLocation: loc, message: \`"\${raw}" — you can't go that way. Exits: \${exitList || 'none'}.\` }`,
         prompt: '',
       },
     },
