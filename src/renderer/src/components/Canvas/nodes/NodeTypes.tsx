@@ -393,7 +393,7 @@ export const NoteNode = memo(({ id, data, selected }: NodeProps<NodeData>) => {
         minWidth: 160,
         minHeight: 90,
       }}
-      className={`relative bg-yellow-900/70 border ${selected ? 'border-yellow-400' : 'border-yellow-600/60'} rounded-lg shadow-lg p-3 cursor-pointer nodrag`}
+      className={`relative bg-yellow-900/70 border ${selected ? 'border-yellow-400' : 'border-yellow-600/60'} rounded-lg shadow-lg p-3 cursor-grab active:cursor-grabbing`}
     >
       {/* Fold triangle */}
       <div
