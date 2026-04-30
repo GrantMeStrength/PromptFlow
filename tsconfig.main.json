@@ -10,5 +10,10 @@
     "esModuleInterop": true,
     "skipLibCheck": true
   },
-  "include": ["src/main", "src/preload"]
+  "include": [
+    "src/main",
+    "src/preload",
+    "src/shared",
+    "src/renderer/src/types"
+  ]
 }

@@ -4,6 +4,9 @@ import fs from 'fs'
 import os from 'os'
 import vm from 'vm'
 import { spawn, ChildProcess } from 'child_process'
+import * as nodeCron from 'node-cron'
+import { generateCode } from '../shared/generator'
+import type { FlowProject, FlowNode, FlowEdge, ScheduleStatus, ScheduleRunEntry } from '../renderer/src/types'
 
 // ─── MCP Stdio Client ─────────────────────────────────────────────────────────
 
@@ -647,6 +650,7 @@ ipcMain.handle('save-to-library', async (_event, project: { id: string; name: st
     const filePath = path.join(dir, fileName)
     const updated = { ...project, updated: new Date().toISOString() }
     await fs.promises.writeFile(filePath, JSON.stringify(updated, null, 2), 'utf-8')
+    rebuildSchedules().catch(() => {})
     return { success: true, path: filePath }
   } catch (err) {
     return { success: false, error: (err as Error).message }
@@ -657,6 +661,7 @@ ipcMain.handle('delete-project', async (_event, filePath: string) => {
   try {
     if (!isPathSafe(filePath)) return { success: false, error: 'Invalid path' }
     await fs.promises.unlink(filePath)
+    rebuildSchedules().catch(() => {})
     return { success: true }
   } catch (err) {
     return { success: false, error: (err as Error).message }
@@ -745,6 +750,156 @@ ipcMain.handle('export-report-pdf', async (_event, htmlContent: string) => {
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
 // Register custom protocol to serve production build without file:// CORS issues
+// ─── Scheduler ───────────────────────────────────────────────────────────────
+
+interface ScheduleEntry {
+  projectId: string
+  projectName: string
+  nodeId: string
+  nodeLabel: string
+  cronExpr: string
+  task: nodeCron.ScheduledTask
+  lastRun?: string
+  lastError?: string
+}
+
+const scheduleRegistry = new Map<string, ScheduleEntry>()
+const runningJobs = new Set<string>() // "${projectId}::${nodeId}"
+
+function scheduleKey(projectId: string, nodeId: string) {
+  return `${projectId}::${nodeId}`
+}
+
+async function runScheduledProject(project: FlowProject, nodeId: string) {
+  const key = scheduleKey(project.id, nodeId)
+  if (runningJobs.has(key)) return // skip overlapping runs
+
+  runningJobs.add(key)
+  const timestamp = new Date().toISOString()
+  const entry = scheduleRegistry.get(key)
+  if (entry) entry.lastRun = timestamp
+
+  let success = true
+  let runError: string | undefined
+
+  try {
+    const code = generateCode(project.nodes as FlowNode[], project.edges as FlowEdge[])
+    const timeoutMs = 30_000
+    const sandbox: Record<string, unknown> = {
+      inputs: { triggered_at: timestamp },
+      __uiInputs__: {},
+      console,
+      Date, Math, JSON, Array, Object, String, Number, Boolean, Set, Map,
+      Promise, RegExp, Error, parseInt, parseFloat, isNaN, isFinite,
+      encodeURIComponent, decodeURIComponent,
+      callLLM: (model: string, prompt: string, systemPrompt?: string) =>
+        callLLM(model, prompt, systemPrompt),
+      callLLMWithTools: (model: string, prompt: string, systemPrompt: string | undefined, mcpConfigs: McpConfig[]) =>
+        callLLMWithTools(model, prompt, systemPrompt, mcpConfigs),
+      getState: (k: string, def: unknown = null) => readStateVar(`${project.id}::${k}`, def),
+      setState: (k: string, val: unknown) => writeStateVar(`${project.id}::${k}`, val),
+      result: undefined,
+    }
+    const context = vm.createContext(sandbox)
+    const script = new vm.Script(`(async () => { ${code} })()`)
+    const runPromise = script.runInContext(context) as Promise<unknown>
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Scheduled run timed out after 30s')), timeoutMs)
+    )
+    await Promise.race([runPromise, timeoutPromise])
+  } catch (err) {
+    success = false
+    runError = (err as Error).message
+    if (entry) entry.lastError = runError
+    console.error(`[scheduler] ${key} failed:`, runError)
+  } finally {
+    runningJobs.delete(key)
+  }
+
+  const runEntry: ScheduleRunEntry = { projectId: project.id, nodeId, timestamp, success, error: runError }
+
+  // Notify renderer if open
+  const wins = BrowserWindow.getAllWindows()
+  wins.forEach(w => w.webContents.send('scheduler-run', runEntry))
+
+  // Append to log file
+  try {
+    const logDir = path.join(getProjectsDir(), 'logs')
+    await fs.promises.mkdir(logDir, { recursive: true })
+    const logPath = path.join(logDir, `${project.id}.log.jsonl`)
+    await fs.promises.appendFile(logPath, JSON.stringify(runEntry) + '\n', 'utf-8')
+  } catch { /* log write failure is non-fatal */ }
+}
+
+async function rebuildSchedules() {
+  // Stop all existing scheduled tasks
+  for (const entry of scheduleRegistry.values()) {
+    entry.task.stop()
+  }
+  scheduleRegistry.clear()
+
+  const dir = getProjectsDir()
+  let files: string[]
+  try {
+    files = await fs.promises.readdir(dir)
+  } catch {
+    return
+  }
+
+  for (const f of files.filter(f => f.endsWith('.promptflow'))) {
+    try {
+      const raw = await fs.promises.readFile(path.join(dir, f), 'utf-8')
+      const project = JSON.parse(raw) as FlowProject
+      const triggerNodes = (project.nodes ?? []).filter(
+        n => n.data.kind === 'trigger' && n.data.triggerEnabled && n.data.cronExpr
+      )
+      for (const node of triggerNodes) {
+        const expr = node.data.cronExpr!
+        if (!nodeCron.validate(expr)) {
+          console.warn(`[scheduler] Invalid cron "${expr}" in ${project.name} / ${node.data.label}`)
+          continue
+        }
+        const key = scheduleKey(project.id, node.id)
+        const task = nodeCron.schedule(expr, () => {
+          // Re-read project from disk on each run to get latest state
+          fs.promises.readFile(path.join(dir, f), 'utf-8')
+            .then(raw2 => JSON.parse(raw2) as FlowProject)
+            .then(p => runScheduledProject(p, node.id))
+            .catch(err => console.error(`[scheduler] Failed to load ${f}:`, err))
+        })
+        scheduleRegistry.set(key, {
+          projectId: project.id,
+          projectName: project.name,
+          nodeId: node.id,
+          nodeLabel: node.data.label,
+          cronExpr: expr,
+          task,
+        })
+        console.log(`[scheduler] Registered "${project.name} / ${node.data.label}" → ${expr}`)
+      }
+    } catch (err) {
+      console.error(`[scheduler] Failed to parse ${f}:`, err)
+    }
+  }
+}
+
+ipcMain.handle('get-schedule-status', (): ScheduleStatus[] => {
+  return Array.from(scheduleRegistry.values()).map(e => ({
+    projectId: e.projectId,
+    projectName: e.projectName,
+    nodeId: e.nodeId,
+    nodeLabel: e.nodeLabel,
+    cronExpr: e.cronExpr,
+    enabled: true,
+    lastRun: e.lastRun,
+    lastError: e.lastError,
+  }))
+})
+
+ipcMain.handle('notify-scheduler', async () => {
+  await rebuildSchedules()
+})
+
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { secure: true, standard: true, supportFetchAPI: true } },
 ])
@@ -787,6 +942,7 @@ app.whenReady().then(() => {
   })
 
   createWindow()
+  rebuildSchedules().catch(err => console.error('[scheduler] Init error:', err))
 })
 
 app.on('window-all-closed', () => {

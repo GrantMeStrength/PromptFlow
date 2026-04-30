@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ElectronAPI, LLMSettings, ChatMessage } from '../renderer/src/types'
+import type { ElectronAPI, LLMSettings, ChatMessage, ScheduleRunEntry } from '../renderer/src/types'
 
 const api: ElectronAPI = {
   saveProject: (project) => ipcRenderer.invoke('save-project', project),
@@ -29,6 +29,14 @@ const api: ElectronAPI = {
   getStateVar: (key: string) => ipcRenderer.invoke('get-state-var', key),
   setStateVar: (key: string, value: unknown) => ipcRenderer.invoke('set-state-var', key, value),
   clearStateVars: () => ipcRenderer.invoke('clear-state-vars'),
+  // Scheduler
+  getScheduleStatus: () => ipcRenderer.invoke('get-schedule-status'),
+  notifyScheduler: () => ipcRenderer.invoke('notify-scheduler'),
+  onSchedulerRun: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, entry: ScheduleRunEntry) => callback(entry)
+    ipcRenderer.on('scheduler-run', handler)
+    return () => ipcRenderer.off('scheduler-run', handler)
+  },
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

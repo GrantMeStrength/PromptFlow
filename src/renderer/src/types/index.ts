@@ -10,7 +10,7 @@ export interface PortDef {
 
 // ─── Node Types ───────────────────────────────────────────────────────────────
 
-export type NodeKind = 'input' | 'function' | 'llm' | 'decision' | 'output' | 'pipe' | 'ui' | 'mcp' | 'note' | 'state' | 'workflow'
+export type NodeKind = 'input' | 'function' | 'llm' | 'decision' | 'output' | 'pipe' | 'ui' | 'mcp' | 'note' | 'state' | 'workflow' | 'trigger'
 
 export interface NodeData {
   label: string
@@ -58,6 +58,9 @@ export interface NodeData {
   workflowName?: string      // Display name of the sub-workflow
   workflowData?: { nodes: FlowNode[]; edges: FlowEdge[] }  // Snapshot at drag time
   workflowUpdated?: string   // ISO timestamp from source project (staleness detection)
+  /** For trigger (scheduler) nodes */
+  cronExpr?: string          // cron expression e.g. "0 9 * * 1-5"
+  triggerEnabled?: boolean   // whether the schedule is active
 }
 
 export interface McpToolInfo {
@@ -113,6 +116,28 @@ export interface ChatMessage {
   content: string
 }
 
+// ─── Scheduler ───────────────────────────────────────────────────────────────
+
+export interface ScheduleStatus {
+  projectId: string
+  projectName: string
+  nodeId: string
+  nodeLabel: string
+  cronExpr: string
+  enabled: boolean
+  lastRun?: string      // ISO timestamp
+  lastError?: string
+  nextRun?: string      // ISO timestamp (estimated)
+}
+
+export interface ScheduleRunEntry {
+  projectId: string
+  nodeId: string
+  timestamp: string
+  success: boolean
+  error?: string
+}
+
 // ─── IPC API (exposed via preload) ───────────────────────────────────────────
 
 export interface ElectronAPI {
@@ -139,6 +164,10 @@ export interface ElectronAPI {
   getStateVar: (key: string) => Promise<{ success: boolean; value?: unknown; error?: string }>
   setStateVar: (key: string, value: unknown) => Promise<{ success: boolean; error?: string }>
   clearStateVars: () => Promise<{ success: boolean; error?: string }>
+  // Scheduler
+  getScheduleStatus: () => Promise<ScheduleStatus[]>
+  notifyScheduler: () => Promise<void>
+  onSchedulerRun: (callback: (entry: ScheduleRunEntry) => void) => () => void
 }
 
 declare global {

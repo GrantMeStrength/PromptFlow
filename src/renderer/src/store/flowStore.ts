@@ -152,6 +152,15 @@ const defaultNodeData = (kind: NodeKind): NodeData => {
       outputs: [{ name: 'result', type: 'any' }],
       code: '',
     },
+    trigger: {
+      label: 'Trigger',
+      description: 'Runs the workflow automatically on a cron schedule.',
+      inputs: [],
+      outputs: [{ name: 'triggered_at', type: 'string', description: 'ISO timestamp of trigger' }],
+      code: '',
+      cronExpr: '0 9 * * *',
+      triggerEnabled: false,
+    },
   }
   return {
     kind,

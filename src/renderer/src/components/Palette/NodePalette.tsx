@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { Download, Cpu, Terminal, GitBranch, Upload, Layers, BookOpen, MessageSquare, FileText, ListChecks, Plug, StickyNote, Database, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react'
+import { Download, Cpu, Terminal, GitBranch, Upload, Layers, BookOpen, MessageSquare, FileText, ListChecks, Plug, StickyNote, Database, RefreshCw, ChevronDown, ChevronRight, Clock } from 'lucide-react'
 import type { NodeKind, NodeData, FlowProject } from '../../types'
 import { useFlowStore } from '../../store/flowStore'
 
@@ -78,6 +78,14 @@ const paletteItems: PaletteItem[] = [
     desc: 'Free-floating annotation, optionally connectable',
     color: 'text-yellow-400',
     bg: 'bg-yellow-900/30 border-yellow-700/50 hover:border-yellow-500',
+  },
+  {
+    kind: 'trigger',
+    icon: <Clock size={18} />,
+    label: 'Trigger',
+    desc: 'Run this workflow automatically on a cron schedule',
+    color: 'text-slate-400',
+    bg: 'bg-slate-900/30 border-slate-700/50 hover:border-slate-500',
   },
 ]
 

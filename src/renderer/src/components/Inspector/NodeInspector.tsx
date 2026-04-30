@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import Editor from '@monaco-editor/react'
-import { X, Trash2, ChevronDown, ChevronUp, Zap, RotateCcw, Loader2, ArrowRightLeft, Sparkles, BookMarked, FolderOpen, Plug, CheckCircle, AlertCircle, Database, Layers, RefreshCw } from 'lucide-react'
+import { X, Trash2, ChevronDown, ChevronUp, Zap, RotateCcw, Loader2, ArrowRightLeft, Sparkles, BookMarked, FolderOpen, Plug, CheckCircle, AlertCircle, Database, Layers, RefreshCw, Clock } from 'lucide-react'
 import { useFlowStore } from '../../store/flowStore'
 import type { NodeKind, PortDef, FlowProject } from '../../types'
 
@@ -38,6 +38,7 @@ const kindColors: Record<NodeKind, string> = {
   state: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
   note: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40',
   workflow: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
+  trigger: 'bg-slate-500/20 text-slate-300 border-slate-500/40',
 }
 
 function PortList({ ports, label }: { ports: PortDef[]; label: string }) {
@@ -58,6 +59,106 @@ function PortList({ ports, label }: { ports: PortDef[]; label: string }) {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+function TriggerInspector({ nodeId, data }: { nodeId: string; data: import('../../types').NodeData }) {
+  const { updateNodeData } = useFlowStore()
+  const [scheduleStatus, setScheduleStatus] = useState<import('../../types').ScheduleStatus | null>(null)
+  const [cronError, setCronError] = useState('')
+  const [humanReadable, setHumanReadable] = useState('')
+
+  const cronExpr = data.cronExpr ?? '0 9 * * *'
+  const triggerEnabled = data.triggerEnabled ?? false
+
+  // Dynamically import cronstrue to avoid SSR issues
+  useEffect(() => {
+    import('cronstrue').then((mod) => {
+      const cs = mod.default ?? mod
+      try {
+        setHumanReadable(cs.toString(cronExpr))
+        setCronError('')
+      } catch {
+        setHumanReadable('')
+        setCronError('Invalid cron expression')
+      }
+    }).catch(() => {})
+  }, [cronExpr])
+
+  useEffect(() => {
+    if (!window.electron?.getScheduleStatus) return
+    window.electron.getScheduleStatus().then(setScheduleStatus).catch(() => {})
+    const interval = setInterval(() => {
+      window.electron?.getScheduleStatus().then(setScheduleStatus).catch(() => {})
+    }, 10_000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const thisStatus = scheduleStatus?.[nodeId]
+
+  return (
+    <div className="space-y-3 border border-slate-700/50 rounded-lg p-3 bg-slate-900/40">
+      <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
+        <Clock size={13} className="text-slate-400" />
+        Schedule
+      </div>
+
+      {/* Enable toggle */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-slate-400">Enabled</span>
+        <button
+          onClick={() => updateNodeData(nodeId, { triggerEnabled: !triggerEnabled })}
+          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${triggerEnabled ? 'bg-indigo-600' : 'bg-slate-700'}`}
+        >
+          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${triggerEnabled ? 'translate-x-4' : 'translate-x-1'}`} />
+        </button>
+      </div>
+
+      {/* Cron expression */}
+      <div>
+        <label className="text-[11px] uppercase tracking-widest text-slate-500 block mb-1">Cron Expression</label>
+        <input
+          type="text"
+          value={cronExpr}
+          onChange={(e) => updateNodeData(nodeId, { cronExpr: e.target.value })}
+          className="w-full bg-[#0f0f1a] text-slate-300 text-xs font-mono rounded-lg px-2.5 py-1.5 border border-[#2a2a3f] focus:border-indigo-500 outline-none"
+          placeholder="0 9 * * *"
+        />
+        {humanReadable && !cronError && (
+          <div className="mt-1 text-[11px] text-slate-400">{humanReadable}</div>
+        )}
+        {cronError && (
+          <div className="mt-1 text-[11px] text-rose-400">{cronError}</div>
+        )}
+        <div className="mt-1 text-[11px] text-slate-600">
+          Format: min hour day month weekday — e.g. "0 9 * * 1-5" = 9am Mon–Fri
+        </div>
+      </div>
+
+      {/* Last run status */}
+      {thisStatus && (
+        <div className="text-[11px] space-y-1 pt-1 border-t border-slate-700/40">
+          {thisStatus.lastRun && (
+            <div className="flex justify-between">
+              <span className="text-slate-500">Last run</span>
+              <span className="text-slate-300">{new Date(thisStatus.lastRun).toLocaleString()}</span>
+            </div>
+          )}
+          {thisStatus.lastError && (
+            <div className="flex justify-between gap-2">
+              <span className="text-slate-500 shrink-0">Last error</span>
+              <span className="text-rose-400 text-right truncate">{thisStatus.lastError}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!triggerEnabled && (
+        <div className="text-[11px] text-slate-500 italic">
+          Save the project to the library and enable this toggle to activate scheduling.
+        </div>
+      )}
     </div>
   )
 }
@@ -742,12 +843,16 @@ export function NodeInspector() {
           </div>
         )}
 
+        {data.kind === 'trigger' && (
+          <TriggerInspector nodeId={node.id} data={data} />
+        )}
+
         {data.kind === 'workflow' && (
           <WorkflowInspector nodeId={node.id} data={data} />
         )}
 
-        {/* Code (hide for UI, MCP, State, and Workflow nodes) */}
-        {data.kind !== 'ui' && data.kind !== 'mcp' && data.kind !== 'state' && data.kind !== 'workflow' && (
+        {/* Code (hide for UI, MCP, State, Workflow, and Trigger nodes) */}
+        {data.kind !== 'ui' && data.kind !== 'mcp' && data.kind !== 'state' && data.kind !== 'workflow' && data.kind !== 'trigger' && (
         <div>
           <button
             className="flex items-center justify-between w-full text-[11px] uppercase tracking-widest text-slate-500 mb-1.5"
@@ -779,8 +884,8 @@ export function NodeInspector() {
         </div>
         )}
 
-        {/* Prompt / Regenerate (hide for UI, MCP, State, and Workflow nodes) */}
-        {data.kind !== 'ui' && data.kind !== 'mcp' && data.kind !== 'state' && data.kind !== 'workflow' && (
+        {/* Prompt / Regenerate (hide for UI, MCP, State, Workflow, and Trigger nodes) */}
+        {data.kind !== 'ui' && data.kind !== 'mcp' && data.kind !== 'state' && data.kind !== 'workflow' && data.kind !== 'trigger' && (
           <div>
             <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-slate-500 mb-1.5">
               <Zap size={11} />
