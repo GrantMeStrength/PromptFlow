@@ -135,7 +135,9 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
     } else {
       // For LLM nodes inject model + prompt template as local constants
       if (node.data.kind === 'llm') {
-        const model = (node.data.llmModel || 'gpt-4o-mini').replace(/`/g, '\\`')
+        const provider = node.data.llmProvider ?? 'default'
+        const rawModel = node.data.llmModel || (provider === 'ollama' ? 'llama3.2' : 'gpt-4o-mini')
+        const model = (provider === 'ollama' ? `ollama/${rawModel}` : rawModel).replace(/`/g, '\\`')
         const tmpl = (node.data.llmPromptTemplate || '{{text}}').replace(/`/g, '\\`')
         lines.push(`  const llmModel = \`${model}\``)
         lines.push(`  const llmPromptTemplate = \`${tmpl}\``)

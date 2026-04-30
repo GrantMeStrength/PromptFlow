@@ -289,13 +289,30 @@ export function NodeInspector() {
                 onChange={(e) => updateNodeData(node.id, { llmPromptTemplate: e.target.value })}
               />
               <div className="flex items-center gap-2 mt-2">
+                <label className="text-[11px] text-slate-500">Provider</label>
+                <select
+                  className="flex-1 bg-[#0f0f1a] text-slate-300 text-xs rounded px-2 py-1 border border-[#2a2a3f] focus:border-indigo-500 outline-none"
+                  value={data.llmProvider ?? 'default'}
+                  onChange={(e) => updateNodeData(node.id, { llmProvider: e.target.value as 'default' | 'ollama' })}
+                >
+                  <option value="default">OpenAI / API settings</option>
+                  <option value="ollama">Ollama (local)</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2 mt-2">
                 <label className="text-[11px] text-slate-500">Model</label>
                 <input
                   className="flex-1 bg-[#0f0f1a] text-slate-300 text-xs rounded px-2 py-1 border border-[#2a2a3f] focus:border-indigo-500 outline-none font-mono"
+                  placeholder={(data.llmProvider === 'ollama') ? 'llama3.2' : 'gpt-4o-mini'}
                   value={data.llmModel ?? ''}
                   onChange={(e) => updateNodeData(node.id, { llmModel: e.target.value })}
                 />
               </div>
+              {data.llmProvider === 'ollama' && (
+                <p className="text-[10px] text-slate-600 mt-1">
+                  Requires <span className="text-slate-400 font-mono">ollama serve</span> running locally. Model must be pulled (e.g. <span className="font-mono text-slate-400">ollama pull llama3.2</span>).
+                </p>
+              )}
             </div>
 
             {/* Skills file */}

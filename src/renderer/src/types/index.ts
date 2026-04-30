@@ -22,7 +22,8 @@ export interface NodeData {
   outputs: PortDef[]
   /** The natural-language prompt used to generate/last-modify this node */
   prompt?: string
-  /** Mock LLM response for prototype (real API call eventually) */
+  /** LLM provider: 'default' uses API settings, 'ollama' uses local Ollama */
+  llmProvider?: 'default' | 'ollama'
   llmModel?: string
   llmPromptTemplate?: string
   llmSkillsFile?: string    // display name of loaded .md file

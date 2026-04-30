@@ -242,25 +242,37 @@ function saveSettings(settings: LLMSettings): void {
 
 async function callLLM(model: string, prompt: string, systemPrompt?: string): Promise<string> {
   const settings = loadSettings()
-  if (!settings.apiKey) throw new Error('No API key configured — open Settings (⚙) to add one.')
-  const baseURL = (settings.baseURL || 'https://api.openai.com/v1').replace(/\/$/, '')
-  // Use settings default model as fallback
-  const resolvedModel = model || settings.defaultModel || 'gpt-4o-mini'
+
+  // Ollama: model is prefixed with "ollama/" — route to local Ollama, no API key needed
+  const isOllama = model.startsWith('ollama/')
+  const resolvedModel = isOllama
+    ? model.slice('ollama/'.length) || 'llama3.2'
+    : model || settings.defaultModel || 'gpt-4o-mini'
+  const baseURL = isOllama
+    ? 'http://localhost:11434/v1'
+    : (settings.baseURL || 'https://api.openai.com/v1').replace(/\/$/, '')
+
+  if (!isOllama && !settings.apiKey) throw new Error('No API key configured — open Settings (⚙) to add one.')
+
   const messages = [
     ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
     { role: 'user', content: prompt },
   ]
-  console.log(`[llm] calling ${baseURL} model=${resolvedModel} prompt-length=${prompt.length}`)
+  console.log(`[llm] ${isOllama ? 'ollama' : 'api'} model=${resolvedModel} prompt-length=${prompt.length}`)
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (!isOllama) headers['Authorization'] = `Bearer ${settings.apiKey}`
+
   const response = await fetch(`${baseURL}/chat/completions`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.apiKey}` },
+    headers,
     body: JSON.stringify({ model: resolvedModel, messages, max_tokens: 2000 }),
   })
   if (!response.ok) {
     const text = await response.text()
     let hint = ''
-    if (response.status === 401) hint = ' (Check your API key in Settings — it may need the "Models" permission.)'
-    if (response.status === 429) hint = ' (Rate limit hit — try again in a moment.)'
+    if (isOllama) hint = ' (Is Ollama running? Try: ollama serve)'
+    else if (response.status === 401) hint = ' (Check your API key in Settings — it may need the "Models" permission.)'
+    else if (response.status === 429) hint = ' (Rate limit hit — try again in a moment.)'
     throw new Error(`LLM API error ${response.status}${hint}\n${text}`)
   }
   const data = await response.json() as { choices: { message: { content: string } }[] }
