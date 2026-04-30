@@ -1,6 +1,6 @@
 # PromptFlow IDE
 
-> *A visual node-graph IDE for prompt-driven development — where workflows are first-class programs, not afterthoughts.*
+> *A visual node-graph IDE for prompt-driven development.*
 
 ![PromptFlow IDE Screenshot](docs/screenshot.png)
 
@@ -19,7 +19,7 @@ Two ideas drove this project:
 ## Quick Start
 
 ```bash
-git clone https://github.com/johnalexander/promptflow.git
+git clone https://github.com/grantmestrength/promptflow.git
 cd promptflow
 npm install
 npm run dev        # Electron + Vite hot-reload
