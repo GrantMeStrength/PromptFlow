@@ -145,6 +145,13 @@ const defaultNodeData = (kind: NodeKind): NodeData => {
       outputs: [],
       code: '',
     },
+    workflow: {
+      label: 'Sub-workflow',
+      description: 'A reusable workflow embedded as a single node.',
+      inputs: [{ name: 'value', type: 'any' }],
+      outputs: [{ name: 'result', type: 'any' }],
+      code: '',
+    },
   }
   return {
     kind,

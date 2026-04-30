@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
-import { Download, Cpu, Terminal, GitBranch, Upload, Layers, BookOpen, MessageSquare, FileText, ListChecks, Plug, StickyNote, Database } from 'lucide-react'
-import type { NodeKind, NodeData } from '../../types'
+import React, { useState, useEffect, useCallback } from 'react'
+import { Download, Cpu, Terminal, GitBranch, Upload, Layers, BookOpen, MessageSquare, FileText, ListChecks, Plug, StickyNote, Database, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react'
+import type { NodeKind, NodeData, FlowProject } from '../../types'
 import { useFlowStore } from '../../store/flowStore'
 
 // ─── Palette: blank node types ───────────────────────────────────────────────
@@ -559,7 +559,35 @@ const categories = [...new Set(libraryItems.map(i => i.category))]
 export function NodePalette() {
   const [tab, setTab] = useState<'nodes' | 'library'>('nodes')
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null)
-  const { addNode, selectNode, updateNodeData } = useFlowStore()
+  const [workflowsExpanded, setWorkflowsExpanded] = useState(false)
+  const [workflowProjects, setWorkflowProjects] = useState<FlowProject[]>([])
+  const [workflowsLoading, setWorkflowsLoading] = useState(false)
+  const { addNode, selectNode, updateNodeData, project } = useFlowStore()
+
+  const loadWorkflowProjects = useCallback(async () => {
+    const api = window.electronAPI
+    if (!api) return
+    setWorkflowsLoading(true)
+    try {
+      const metas = await api.listProjects()
+      const projects = await Promise.all(
+        metas.map(async (meta) => {
+          const res = await api.openProjectByPath(meta.path)
+          return res.success && res.project ? res.project : null
+        })
+      )
+      setWorkflowProjects(projects.filter(Boolean) as FlowProject[])
+    } finally {
+      setWorkflowsLoading(false)
+    }
+  }, [])
+
+  // Reload when workflows section is opened
+  const handleToggleWorkflows = () => {
+    const next = !workflowsExpanded
+    setWorkflowsExpanded(next)
+    if (next) loadWorkflowProjects()
+  }
 
   const handleAdd = (kind: NodeKind) => {
     const x = 350 + Math.random() * 100
@@ -585,6 +613,27 @@ export function NodePalette() {
     const y = 150 + Math.random() * 150
     const node = addNode(item.kind, { x, y })
     updateNodeData(node.id, { label: item.label, description: item.description, ...item.data } as Partial<NodeData>)
+    selectNode(node.id)
+  }
+
+  const handleAddWorkflow = (wfProject: FlowProject) => {
+    if (wfProject.id === project?.id) return // prevent self-reference
+    const x = 350 + Math.random() * 100
+    const y = 150 + Math.random() * 150
+    // Derive input ports from the sub-workflow's input nodes
+    const inputNodes = wfProject.nodes.filter(n => n.data.kind === 'input')
+    const outputs = inputNodes.flatMap(n => n.data.outputs ?? [])
+    const dedupedInputs = outputs.filter((p, i, arr) => arr.findIndex(x => x.name === p.name) === i)
+    const node = addNode('workflow', { x, y }, {
+      label: wfProject.name,
+      description: wfProject.description || `Sub-workflow: ${wfProject.name}`,
+      workflowRef: wfProject.id,
+      workflowName: wfProject.name,
+      workflowData: { nodes: wfProject.nodes, edges: wfProject.edges },
+      workflowUpdated: wfProject.updated,
+      inputs: dedupedInputs.length > 0 ? dedupedInputs : [{ name: 'value', type: 'any' }],
+      outputs: [{ name: 'result', type: 'any', description: 'Sub-workflow output' }],
+    })
     selectNode(node.id)
   }
 
@@ -651,6 +700,48 @@ export function NodePalette() {
               </div>
             </button>
           ))}
+
+          {/* Sub-workflows from library */}
+          {window.electronAPI && (
+            <>
+              <button
+                onClick={handleToggleWorkflows}
+                className="flex items-center justify-between px-1 pt-3 pb-1 w-full text-[10px] uppercase tracking-widest text-slate-600 hover:text-slate-400 transition-colors"
+              >
+                <span>Workflows</span>
+                <span className="flex items-center gap-1">
+                  {workflowsLoading && <RefreshCw size={9} className="animate-spin" />}
+                  {workflowsExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                </span>
+              </button>
+              {workflowsExpanded && (
+                <div className="flex flex-col gap-1">
+                  {workflowProjects.length === 0 && !workflowsLoading && (
+                    <p className="px-1 text-[10px] text-slate-600 leading-relaxed">
+                      No saved workflows yet. Save a project to the library first.
+                    </p>
+                  )}
+                  {workflowProjects
+                    .filter(w => w.id !== project?.id)
+                    .map((wf) => (
+                      <button
+                        key={wf.id}
+                        onClick={() => handleAddWorkflow(wf)}
+                        className="flex items-start gap-3 p-3 rounded-xl border text-left transition-all duration-150 cursor-pointer bg-indigo-900/30 border-indigo-700/50 hover:border-indigo-400"
+                      >
+                        <span className="text-indigo-400 shrink-0 mt-0.5"><Layers size={16} /></span>
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-indigo-400 truncate">{wf.name}</div>
+                          {wf.description && (
+                            <div className="text-[11px] text-slate-500 leading-tight mt-0.5 line-clamp-2">{wf.description}</div>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                </div>
+              )}
+            </>
+          )}
 
           <div className="px-1 pt-2 text-[10px] text-slate-600 leading-relaxed">
             Click to add a blank node, then connect ports by dragging.

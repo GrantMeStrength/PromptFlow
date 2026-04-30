@@ -41,40 +41,21 @@ function topoSort(nodes: FlowNode[], edges: FlowEdge[]): FlowNode[] {
   return sorted.map((id) => nodeById.get(id)!).filter(Boolean)
 }
 
-// ─── Code Generation ─────────────────────────────────────────────────────────
+// ─── Edge Maps ────────────────────────────────────────────────────────────────
 
-/**
- * Generates a self-contained async JavaScript pipeline from the node graph.
- * The entry point is `runPipeline(initialInput)`.
- *
- * Each node becomes a named async function. Edges wire outputs to inputs.
- * Decision nodes produce multiple output branches by key.
- */
-export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
-  if (nodes.length === 0) return '// Empty graph – no code generated'
-
-  const sorted = topoSort(nodes, edges)
-
-  // Build node-by-id map (includes mcp nodes for config lookup)
+function buildEdgeMaps(nodes: FlowNode[], edges: FlowEdge[], execIds: Set<string>) {
   const nodeById = new Map(nodes.map(n => [n.id, n]))
-
-  // Map: targetNodeId → { targetHandle → { sourceNodeId, sourceHandle } }
-  // Only for edges between exec (non-mcp) nodes
-  const execIds = new Set(sorted.map(n => n.id))
   const inputSources = new Map<string, Map<string, { srcId: string; handle: string; explicit: boolean }>>()
-  // Separately track which MCP nodes feed into each LLM node
-  const mcpSources = new Map<string, NodeData[]>() // llmNodeId → mcp NodeData[]
+  const mcpSources = new Map<string, NodeData[]>()
 
   for (const e of edges) {
     const srcNode = nodeById.get(e.source)
     if (!srcNode) continue
 
     if (srcNode.data.kind === 'mcp') {
-      // Config edge: wire MCP config into target LLM node
       if (!mcpSources.has(e.target)) mcpSources.set(e.target, [])
       mcpSources.get(e.target)!.push(srcNode.data)
     } else if (execIds.has(e.source) && execIds.has(e.target)) {
-      // Data edge between exec nodes
       if (!inputSources.has(e.target)) inputSources.set(e.target, new Map())
       inputSources.get(e.target)!.set(
         e.targetHandle ?? 'value',
@@ -89,6 +70,195 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
     }
   }
 
+  return { inputSources, mcpSources }
+}
+
+// ─── Node Body Emitter (shared by main pipeline and sub-workflows) ─────────────
+
+function emitNodeBodyLines(
+  node: FlowNode,
+  mcpSources: Map<string, NodeData[]>,
+  lines: string[],
+  ind: string
+): void {
+  if (node.data.kind === 'ui') {
+    switch (node.data.uiKind) {
+      case 'file':
+        if (node.data.uiMultiple) {
+          lines.push(`${ind}return __uiInputs__['${node.id}'] ?? { files: [] }`)
+        } else {
+          lines.push(`${ind}return __uiInputs__['${node.id}'] ?? { filename: '', content: '', type: '', size: 0 }`)
+        }
+        break
+      case 'choice':
+        lines.push(`${ind}return __uiInputs__['${node.id}'] ?? { choice: '', index: -1 }`)
+        break
+      default:
+        lines.push(`${ind}return __uiInputs__['${node.id}'] ?? { value: '' }`)
+    }
+    return
+  }
+
+  if (node.data.kind === 'state') {
+    const key = (node.data.stateKey ?? 'unnamed').replace(/`/g, '\\`')
+    let defaultVal: unknown = null
+    try { defaultVal = JSON.parse(node.data.stateDefault ?? 'null') } catch { defaultVal = node.data.stateDefault ?? null }
+    const defaultExpr = JSON.stringify(defaultVal)
+    if (node.data.stateMode === 'write') {
+      lines.push(`${ind}const _val = inputs.value !== undefined ? inputs.value : ${defaultExpr}`)
+      lines.push(`${ind}await setState(\`${key}\`, _val)`)
+      lines.push(`${ind}return { value: _val }`)
+    } else {
+      lines.push(`${ind}const _stored = await getState(\`${key}\`, ${defaultExpr})`)
+      lines.push(`${ind}return { value: _stored }`)
+    }
+    return
+  }
+
+  if (node.data.kind === 'llm') {
+    const provider = node.data.llmProvider ?? 'default'
+    const rawModel = node.data.llmModel || (provider === 'ollama' ? 'llama3.2' : 'gpt-4o-mini')
+    const model = (provider === 'ollama' ? `ollama/${rawModel}` : rawModel).replace(/`/g, '\\`')
+    const tmpl = (node.data.llmPromptTemplate || '{{text}}').replace(/`/g, '\\`')
+    lines.push(`${ind}const llmModel = \`${model}\``)
+    lines.push(`${ind}const llmPromptTemplate = \`${tmpl}\``)
+    if (node.data.llmSkillsContent) {
+      const skills = node.data.llmSkillsContent.replace(/`/g, '\\`')
+      lines.push(`${ind}const llmSystemPrompt = \`${skills}\``)
+    }
+    const mcpList = mcpSources.get(node.id) ?? []
+    if (mcpList.length > 0) {
+      const configs = mcpList.map(d => ({
+        command: d.mcpCommand ?? '',
+        args: (d.mcpArgs ?? '').split('\n').map(s => s.trim()).filter(Boolean),
+        env: Object.fromEntries(
+          (d.mcpEnv ?? '').split('\n')
+            .map(s => s.trim())
+            .filter(s => s.includes('='))
+            .map(s => { const i = s.indexOf('='); return [s.slice(0, i), s.slice(i + 1)] })
+        ),
+      }))
+      lines.push(`${ind}const mcpConfigs = ${JSON.stringify(configs)}`)
+    }
+  }
+
+  // Wrap user code in an inner async IIFE so BOTH coding patterns work:
+  //   • return { result: value }  — explicit return, captured as __output
+  //   • result = value            — assignment, returned via fallback
+  const nodeCode = node.data.code || 'return inputs'
+  lines.push(`${ind}let result`)
+  lines.push(`${ind}const __output = await (async () => {`)
+  for (const codeLine of nodeCode.split('\n')) {
+    lines.push(`${ind}  ${codeLine}`)
+  }
+  lines.push(`${ind}})()`)
+  lines.push(`${ind}return __output !== undefined ? __output : result`)
+}
+
+// ─── Sub-workflow IIFE Body Generator ─────────────────────────────────────────
+
+/**
+ * Generates lines for the body of a sub-workflow IIFE.
+ * Called inside: return await (async (__subInputs__) => { <<here>> })(inputs)
+ * ancestorIds guards against circular sub-workflow references.
+ */
+function generateSubWorkflowIIFE(
+  nodes: FlowNode[],
+  edges: FlowEdge[],
+  ancestorIds: Set<string>,
+  ind: string = '    '
+): string[] {
+  const sorted = topoSort(nodes, edges)
+  if (sorted.length === 0) return [`${ind}return null`]
+
+  const execIds = new Set(sorted.map(n => n.id))
+  const { inputSources, mcpSources } = buildEdgeMaps(nodes, edges, execIds)
+  const lines: string[] = []
+
+  lines.push(`${ind}const _r = {}`)
+  lines.push(``)
+
+  for (const node of sorted) {
+    if (node.data.kind === 'mcp') continue
+    const fnId = `_sf_${node.id.replace(/-/g, '_')}`
+    lines.push(`${ind}// ${node.data.label} (${node.data.kind})`)
+
+    if (node.data.kind === 'input') {
+      lines.push(`${ind}_r["${node.id}"] = __subInputs__`)
+    } else if (node.data.kind === 'workflow') {
+      const refId = node.data.workflowRef ?? ''
+      if (ancestorIds.has(refId) || !node.data.workflowData) {
+        lines.push(`${ind}_r["${node.id}"] = { error: 'Circular or missing workflow: ${node.data.workflowName ?? refId}' }`)
+      } else {
+        const newAncestors = new Set([...ancestorIds, refId])
+        const deeperInd = ind + '  '
+        const nestedLines = generateSubWorkflowIIFE(node.data.workflowData.nodes, node.data.workflowData.edges, newAncestors, deeperInd)
+        lines.push(`${ind}async function ${fnId}(inputs) {`)
+        lines.push(`${deeperInd}return await (async (__subInputs__) => {`)
+        lines.push(...nestedLines)
+        lines.push(`${deeperInd}})(inputs)`)
+        lines.push(`${ind}}`)
+        const sources = inputSources.get(node.id)
+        const inputParts: string[] = []
+        if (sources) {
+          for (const [targetHandle, { srcId, handle, explicit }] of sources) {
+            const ref = `_r["${srcId}"]`
+            inputParts.push(explicit ? `"${targetHandle}": ${ref}?.["${handle}"]` : `"${targetHandle}": ${ref}?.["${handle}"] ?? ${ref}`)
+          }
+        }
+        lines.push(`${ind}_r["${node.id}"] = await ${fnId}({ ${inputParts.join(', ')} })`)
+      }
+    } else {
+      lines.push(`${ind}async function ${fnId}(inputs) {`)
+      emitNodeBodyLines(node, mcpSources, lines, ind + '  ')
+      lines.push(`${ind}}`)
+      const sources = inputSources.get(node.id)
+      const inputParts: string[] = []
+      if (node.data.kind !== 'ui' && sources) {
+        for (const [targetHandle, { srcId, handle, explicit }] of sources) {
+          const ref = `_r["${srcId}"]`
+          inputParts.push(explicit ? `"${targetHandle}": ${ref}?.["${handle}"]` : `"${targetHandle}": ${ref}?.["${handle}"] ?? ${ref}`)
+        }
+      }
+      if (node.data.kind === 'ui') {
+        lines.push(`${ind}_r["${node.id}"] = await ${fnId}({})`)
+      } else {
+        lines.push(`${ind}_r["${node.id}"] = await ${fnId}({ ${inputParts.join(', ')} })`)
+      }
+    }
+
+    lines.push(``)
+  }
+
+  // Return from last output node, or last exec node
+  const outputNodes = sorted.filter(n => n.data.kind === 'output')
+  const returnNode = outputNodes.length > 0 ? outputNodes[outputNodes.length - 1] : sorted[sorted.length - 1]
+  if (returnNode) {
+    lines.push(`${ind}return _r["${returnNode.id}"]`)
+  }
+
+  return lines
+}
+
+// ─── Code Generation ─────────────────────────────────────────────────────────
+
+/**
+ * Generates a self-contained async JavaScript pipeline from the node graph.
+ * The entry point is `runPipeline(initialInput)`.
+ *
+ * Each node becomes a named async function. Edges wire outputs to inputs.
+ * Decision nodes produce multiple output branches by key.
+ * Workflow nodes embed their sub-pipeline as an IIFE closure.
+ */
+export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
+  if (nodes.length === 0) return '// Empty graph – no code generated'
+
+  const sorted = topoSort(nodes, edges)
+
+  // Build node-by-id map (includes mcp nodes for config lookup)
+  const execIds = new Set(sorted.map(n => n.id))
+  const { inputSources, mcpSources } = buildEdgeMaps(nodes, edges, execIds)
+
   const lines: string[] = []
   lines.push(`// ═══════════════════════════════════════════════════`)
   lines.push(`// PromptFlow – Generated Pipeline`)
@@ -101,80 +271,27 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
     const fnName = nodeToFnName(node.id, node.data.label)
     lines.push(`// ── Node: ${node.data.label} (${node.data.kind}) ──`)
     lines.push(`async function ${fnName}(inputs) {`)
-    if (node.data.kind === 'ui') {
-      // UI nodes read their value from the __uiInputs__ global injected by the runtime
-      switch (node.data.uiKind) {
-        case 'file':
-          if (node.data.uiMultiple) {
-            lines.push(`  return __uiInputs__['${node.id}'] ?? { files: [] }`)
-          } else {
-            lines.push(`  return __uiInputs__['${node.id}'] ?? { filename: '', content: '', type: '', size: 0 }`)
-          }
-          break
-        case 'choice':
-          lines.push(`  return __uiInputs__['${node.id}'] ?? { choice: '', index: -1 }`)
-          break
-        default: // 'text'
-          lines.push(`  return __uiInputs__['${node.id}'] ?? { value: '' }`)
-      }
-    } else if (node.data.kind === 'state') {
-      // State nodes read from or write to persistent storage via getState/setState injected by runtime
-      const key = (node.data.stateKey ?? 'unnamed').replace(/`/g, '\\`')
-      let defaultVal: unknown = null
-      try { defaultVal = JSON.parse(node.data.stateDefault ?? 'null') } catch { defaultVal = node.data.stateDefault ?? null }
-      const defaultExpr = JSON.stringify(defaultVal)
-      if (node.data.stateMode === 'write') {
-        lines.push(`  const _val = inputs.value !== undefined ? inputs.value : ${defaultExpr}`)
-        lines.push(`  await setState(\`${key}\`, _val)`)
-        lines.push(`  return { value: _val }`)
+
+    if (node.data.kind === 'workflow') {
+      if (!node.data.workflowData) {
+        lines.push(`  return inputs`)
       } else {
-        // read (default)
-        lines.push(`  const _stored = await getState(\`${key}\`, ${defaultExpr})`)
-        lines.push(`  return { value: _stored }`)
+        const ancestorIds = new Set<string>([node.data.workflowRef ?? ''])
+        lines.push(`  // Sub-workflow: "${node.data.workflowName ?? 'Unknown'}"`)
+        lines.push(`  return await (async (__subInputs__) => {`)
+        const subLines = generateSubWorkflowIIFE(
+          node.data.workflowData.nodes,
+          node.data.workflowData.edges,
+          ancestorIds,
+          '    '
+        )
+        lines.push(...subLines)
+        lines.push(`  })(inputs)`)
       }
     } else {
-      // For LLM nodes inject model + prompt template as local constants
-      if (node.data.kind === 'llm') {
-        const provider = node.data.llmProvider ?? 'default'
-        const rawModel = node.data.llmModel || (provider === 'ollama' ? 'llama3.2' : 'gpt-4o-mini')
-        const model = (provider === 'ollama' ? `ollama/${rawModel}` : rawModel).replace(/`/g, '\\`')
-        const tmpl = (node.data.llmPromptTemplate || '{{text}}').replace(/`/g, '\\`')
-        lines.push(`  const llmModel = \`${model}\``)
-        lines.push(`  const llmPromptTemplate = \`${tmpl}\``)
-        if (node.data.llmSkillsContent) {
-          const skills = node.data.llmSkillsContent.replace(/`/g, '\\`')
-          lines.push(`  const llmSystemPrompt = \`${skills}\``)
-        }
-        // Inject MCP configs for any connected MCP Server nodes
-        const mcpList = mcpSources.get(node.id) ?? []
-        if (mcpList.length > 0) {
-          const configs = mcpList.map(d => ({
-            command: d.mcpCommand ?? '',
-            args: (d.mcpArgs ?? '').split('\n').map(s => s.trim()).filter(Boolean),
-            env: Object.fromEntries(
-              (d.mcpEnv ?? '').split('\n')
-                .map(s => s.trim())
-                .filter(s => s.includes('='))
-                .map(s => { const i = s.indexOf('='); return [s.slice(0, i), s.slice(i + 1)] })
-            ),
-          }))
-          lines.push(`  const mcpConfigs = ${JSON.stringify(configs)}`)
-        }
-      }
-      // Wrap user code in an inner async IIFE so BOTH coding patterns work:
-      //   • return { result: value }  — explicit return, captured as __output
-      //   • result = value            — assignment, returned via fallback
-      //   • result = value; return    — was broken before; now safe (bare return
-      //                                 gives __output = undefined → falls back to result)
-      const nodeCode = node.data.code || 'return inputs'
-      lines.push(`  let result`)
-      lines.push(`  const __output = await (async () => {`)
-      for (const codeLine of nodeCode.split('\n')) {
-        lines.push(`    ${codeLine}`)
-      }
-      lines.push(`  })()`)
-      lines.push(`  return __output !== undefined ? __output : result`)
+      emitNodeBodyLines(node, mcpSources, lines, '  ')
     }
+
     lines.push(`}`)
     lines.push(``)
   }
@@ -200,9 +317,6 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
       } else if (sources) {
         for (const [targetHandle, { srcId, handle, explicit }] of sources) {
           const srcFn = `results["${srcId}"]`
-          // If the edge had an explicit sourceHandle (e.g. Decision 'true'/'false'),
-          // use it directly — do NOT fall back to the whole result, because Decision
-          // nodes intentionally return null for the inactive branch.
           if (explicit) {
             inputParts.push(`"${targetHandle}": ${srcFn}?.["${handle}"]`)
           } else {
@@ -231,3 +345,4 @@ function nodeToFnName(id: string, label: string): string {
   const clean = label.replace(/[^a-zA-Z0-9]/g, '_').replace(/^_+|_+$/g, '')
   return `${clean}_${id.replace(/-/g, '_')}`
 }
+

@@ -2,7 +2,7 @@ import React, { memo, useState } from 'react'
 import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 import type { NodeData } from '../../../types'
-import { Download, Upload, Cpu, GitBranch, Terminal, ArrowRightLeft, MessageSquare, FileText, ListChecks, Plug, StickyNote, Database } from 'lucide-react'
+import { Download, Upload, Cpu, GitBranch, Terminal, ArrowRightLeft, MessageSquare, FileText, ListChecks, Plug, StickyNote, Database, Layers } from 'lucide-react'
 import { useFlowStore } from '../../../store/flowStore'
 
 // ─── Shared node styles ───────────────────────────────────────────────────────
@@ -43,6 +43,12 @@ const kindMeta: Record<string, { bg: string; border: string; icon: React.ReactNo
     border: 'border-cyan-500',
     icon: <Database size={14} />,
     label: 'STATE',
+  },
+  workflow: {
+    bg: 'bg-indigo-900/80',
+    border: 'border-indigo-400',
+    icon: <Layers size={14} />,
+    label: 'WORKFLOW',
   },
 }
 
@@ -378,11 +384,13 @@ export const InputNode = memo((props: NodeProps<NodeData>) => <BaseNode {...prop
 export const FunctionNode = memo((props: NodeProps<NodeData>) => <BaseNode {...props} />)
 export const DecisionNode = memo((props: NodeProps<NodeData>) => <BaseNode {...props} />)
 export const OutputNode = memo((props: NodeProps<NodeData>) => <BaseNode {...props} />)
+export const WorkflowNode = memo((props: NodeProps<NodeData>) => <BaseNode {...props} />)
 
 InputNode.displayName = 'InputNode'
 FunctionNode.displayName = 'FunctionNode'
 DecisionNode.displayName = 'DecisionNode'
 OutputNode.displayName = 'OutputNode'
+WorkflowNode.displayName = 'WorkflowNode'
 
 // ─── State Variable node ──────────────────────────────────────────────────────
 

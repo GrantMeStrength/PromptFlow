@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import Editor from '@monaco-editor/react'
-import { X, Trash2, ChevronDown, ChevronUp, Zap, RotateCcw, Loader2, ArrowRightLeft, Sparkles, BookMarked, FolderOpen, Plug, CheckCircle, AlertCircle, Database } from 'lucide-react'
+import { X, Trash2, ChevronDown, ChevronUp, Zap, RotateCcw, Loader2, ArrowRightLeft, Sparkles, BookMarked, FolderOpen, Plug, CheckCircle, AlertCircle, Database, Layers, RefreshCw } from 'lucide-react'
 import { useFlowStore } from '../../store/flowStore'
-import type { NodeKind, PortDef } from '../../types'
+import type { NodeKind, PortDef, FlowProject } from '../../types'
 
 const REGEN_SYSTEM_PROMPT = `You are updating a single node in PromptFlow, a node-graph IDE.
 The user has described what they want the node to do. Update the node accordingly.
@@ -37,6 +37,7 @@ const kindColors: Record<NodeKind, string> = {
   mcp: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
   state: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
   note: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40',
+  workflow: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
 }
 
 function PortList({ ports, label }: { ports: PortDef[]; label: string }) {
@@ -57,6 +58,108 @@ function PortList({ ports, label }: { ports: PortDef[]; label: string }) {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+function WorkflowInspector({ nodeId, data }: { nodeId: string; data: import('../../types').NodeData }) {
+  const { updateNodeData } = useFlowStore()
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshError, setRefreshError] = useState('')
+
+  const handleRefresh = async () => {
+    if (!data.workflowRef) return
+    const api = window.electronAPI
+    if (!api) return
+    setRefreshing(true)
+    setRefreshError('')
+    try {
+      const metas = await api.listProjects()
+      const meta = metas.find(m => {
+        // Try to match by loading each project — we match by stored workflowRef
+        return true // we will filter after loading
+      })
+      // Load all, find the one matching workflowRef
+      const all = await Promise.all(metas.map(m => api.openProjectByPath(m.path)))
+      const found = all.find(r => r.success && r.project?.id === data.workflowRef)
+      if (!found?.project) {
+        setRefreshError('Could not find the original workflow in the library.')
+        return
+      }
+      const wf = found.project as FlowProject
+      const inputNodes = wf.nodes.filter(n => n.data.kind === 'input')
+      const outputs = inputNodes.flatMap(n => n.data.outputs ?? [])
+      const dedupedInputs = outputs.filter((p, i, arr) => arr.findIndex(x => x.name === p.name) === i)
+      updateNodeData(nodeId, {
+        workflowName: wf.name,
+        workflowData: { nodes: wf.nodes, edges: wf.edges },
+        workflowUpdated: wf.updated,
+        inputs: dedupedInputs.length > 0 ? dedupedInputs : [{ name: 'value', type: 'any' }],
+        outputs: [{ name: 'result', type: 'any', description: 'Sub-workflow output' }],
+        description: wf.description || `Sub-workflow: ${wf.name}`,
+      })
+    } catch {
+      setRefreshError('Refresh failed. Check the library and try again.')
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  const nodeCount = data.workflowData?.nodes?.length ?? 0
+  const edgeCount = data.workflowData?.edges?.length ?? 0
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-indigo-400 mb-1">
+        <Layers size={11} />
+        Sub-Workflow
+      </div>
+
+      <div className="rounded-lg bg-indigo-900/20 border border-indigo-700/40 p-3 space-y-1.5">
+        <div className="text-sm font-semibold text-indigo-300 truncate">{data.workflowName || data.label}</div>
+        <div className="text-[11px] text-slate-500">
+          {nodeCount} node{nodeCount !== 1 ? 's' : ''}, {edgeCount} connection{edgeCount !== 1 ? 's' : ''}
+        </div>
+      </div>
+
+      <div>
+        <div className="text-[11px] uppercase tracking-widest text-slate-500 mb-1.5">Inputs</div>
+        {(data.inputs ?? []).length === 0 ? (
+          <p className="text-[11px] text-slate-600">None</p>
+        ) : (
+          <div className="flex flex-col gap-1">
+            {(data.inputs ?? []).map(p => (
+              <div key={p.name} className="flex items-center gap-2 text-xs">
+                <span className="font-mono text-indigo-300 bg-indigo-900/40 px-1.5 py-0.5 rounded">{p.name}</span>
+                <span className="text-slate-500">{p.type}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <div className="text-[11px] uppercase tracking-widest text-slate-500 mb-1.5">Outputs</div>
+        {(data.outputs ?? []).map(p => (
+          <div key={p.name} className="flex items-center gap-2 text-xs">
+            <span className="font-mono text-indigo-300 bg-indigo-900/40 px-1.5 py-0.5 rounded">{p.name}</span>
+            <span className="text-slate-500">{p.type}</span>
+          </div>
+        ))}
+      </div>
+
+      {refreshError && (
+        <p className="text-[11px] text-red-400">{refreshError}</p>
+      )}
+
+      <button
+        onClick={handleRefresh}
+        disabled={refreshing}
+        className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg bg-indigo-900/40 hover:bg-indigo-800/50 border border-indigo-700/40 text-indigo-300 transition-colors w-full justify-center disabled:opacity-50"
+      >
+        {refreshing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+        Refresh from Library
+      </button>
     </div>
   )
 }
@@ -639,8 +742,12 @@ export function NodeInspector() {
           </div>
         )}
 
-        {/* Code (hide for UI, MCP, and State nodes) */}
-        {data.kind !== 'ui' && data.kind !== 'mcp' && data.kind !== 'state' && (
+        {data.kind === 'workflow' && (
+          <WorkflowInspector nodeId={node.id} data={data} />
+        )}
+
+        {/* Code (hide for UI, MCP, State, and Workflow nodes) */}
+        {data.kind !== 'ui' && data.kind !== 'mcp' && data.kind !== 'state' && data.kind !== 'workflow' && (
         <div>
           <button
             className="flex items-center justify-between w-full text-[11px] uppercase tracking-widest text-slate-500 mb-1.5"
@@ -672,8 +779,8 @@ export function NodeInspector() {
         </div>
         )}
 
-        {/* Prompt / Regenerate (hide for UI, MCP, and State nodes) */}
-        {data.kind !== 'ui' && data.kind !== 'mcp' && data.kind !== 'state' && (
+        {/* Prompt / Regenerate (hide for UI, MCP, State, and Workflow nodes) */}
+        {data.kind !== 'ui' && data.kind !== 'mcp' && data.kind !== 'state' && data.kind !== 'workflow' && (
           <div>
             <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-slate-500 mb-1.5">
               <Zap size={11} />

@@ -10,7 +10,7 @@ export interface PortDef {
 
 // ─── Node Types ───────────────────────────────────────────────────────────────
 
-export type NodeKind = 'input' | 'function' | 'llm' | 'decision' | 'output' | 'pipe' | 'ui' | 'mcp' | 'note' | 'state'
+export type NodeKind = 'input' | 'function' | 'llm' | 'decision' | 'output' | 'pipe' | 'ui' | 'mcp' | 'note' | 'state' | 'workflow'
 
 export interface NodeData {
   label: string
@@ -53,6 +53,11 @@ export interface NodeData {
   stateKey?: string        // persistent variable name
   stateDefault?: string    // JSON-serialisable default value (stored as string)
   stateMode?: 'read' | 'write'
+  /** For workflow (sub-workflow composite) nodes */
+  workflowRef?: string       // ID of the source project in the library
+  workflowName?: string      // Display name of the sub-workflow
+  workflowData?: { nodes: FlowNode[]; edges: FlowEdge[] }  // Snapshot at drag time
+  workflowUpdated?: string   // ISO timestamp from source project (staleness detection)
 }
 
 export interface McpToolInfo {
