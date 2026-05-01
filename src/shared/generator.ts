@@ -49,6 +49,18 @@ function buildEdgeMaps(nodes: FlowNode[], edges: FlowEdge[], execIds: Set<string
   const mcpSources = new Map<string, NodeData[]>()
   const systemPromptSources = new Map<string, string>() // targetNodeId → sourceNodeId
 
+  // Pre-count non-explicit edges per target so we can use source-ID keys only when
+  // multiple sources wire to the same target without explicit handles (multi-input nodes).
+  // Single-input nodes keep the classic 'value' key for backward compatibility.
+  const implicitEdgeCounts = new Map<string, number>()
+  for (const e of edges) {
+    if (execIds.has(e.source) && execIds.has(e.target) && e.targetHandle == null
+        && nodeById.get(e.source)?.data.kind !== 'mcp'
+        && nodeById.get(e.source)?.data.kind !== 'systemprompt') {
+      implicitEdgeCounts.set(e.target, (implicitEdgeCounts.get(e.target) ?? 0) + 1)
+    }
+  }
+
   for (const e of edges) {
     const srcNode = nodeById.get(e.source)
     if (!srcNode) continue
@@ -61,8 +73,12 @@ function buildEdgeMaps(nodes: FlowNode[], edges: FlowEdge[], execIds: Set<string
       systemPromptSources.set(e.target, e.source)
     } else if (execIds.has(e.source) && execIds.has(e.target)) {
       if (!inputSources.has(e.target)) inputSources.set(e.target, new Map())
+      // Key: use explicit targetHandle when set; otherwise use source-ID only when there are
+      // multiple implicit edges (multi-input nodes). Single-input nodes keep 'value' for
+      // backward compatibility so inputs.value always holds the upstream result.
+      const isMultiImplicit = e.targetHandle == null && (implicitEdgeCounts.get(e.target) ?? 0) > 1
       inputSources.get(e.target)!.set(
-        e.targetHandle ?? 'value',
+        e.targetHandle ?? (isMultiImplicit ? e.source : 'value'),
         {
           srcId: e.source,
           handle: e.sourceHandle ?? 'result',
@@ -251,7 +267,10 @@ function emitNodeBodyLines(
       lines.push(`${ind}let _llmPrompt = llmPromptTemplate`)
       // Helper: resolve a template variable from inputs, including when the value
       // arrives nested inside an upstream object (e.g. inputs.value = { text: "..." })
-      lines.push(`${ind}const _llmResolve = (k) => { const _d = inputs[k]; if (_d != null && typeof _d !== 'object') return String(_d); for (const _iv of Object.values(inputs)) { if (_iv && typeof _iv === 'object' && _iv[k] != null) return String(_iv[k]); } for (const _iv of Object.values(inputs)) { if (_iv && typeof _iv === 'object' && _iv['value'] != null) return String(_iv['value']); } for (const _iv of Object.values(inputs)) { if (_iv && typeof _iv === 'object') { const _s = Object.values(_iv).find(v => typeof v === 'string'); if (_s != null) return String(_s); } } const _strs = Object.values(inputs).filter(v => typeof v === 'string'); return _strs.length > 0 ? _strs[0] : ''; }`)
+      // _llmResolve(k): resolves template variable k from inputs.
+      // Handles source-ID-keyed inputs (e.g. inputs['node1'] = {value:'cats'}) by
+      // extracting the primary string from an object when inputs[k] is itself an object.
+      lines.push(`${ind}const _llmResolve = (k) => { const _d = inputs[k]; if (_d != null && typeof _d !== 'object') return String(_d); if (_d != null && typeof _d === 'object') { const _p = _d.response ?? _d.result ?? _d.content ?? _d.value ?? _d.text; if (_p != null && typeof _p !== 'object') return String(_p); } for (const _iv of Object.values(inputs)) { if (_iv && typeof _iv === 'object' && _iv[k] != null && typeof _iv[k] !== 'object') return String(_iv[k]); } for (const _iv of Object.values(inputs)) { if (_iv && typeof _iv === 'object' && _iv['value'] != null && typeof _iv['value'] !== 'object') return String(_iv['value']); } for (const _iv of Object.values(inputs)) { if (_iv && typeof _iv === 'object') { const _s = Object.values(_iv).find(v => typeof v === 'string'); if (_s != null) return String(_s); } } const _strs = Object.values(inputs).filter(v => typeof v === 'string'); return _strs.length > 0 ? _strs[0] : ''; }`)
       for (const v of templateVars) {
         lines.push(`${ind}_llmPrompt = _llmPrompt.replace('{{${v}}}', _llmResolve('${v}'))`)
       }
@@ -278,9 +297,9 @@ function emitNodeBodyLines(
   lines.push(`${ind}const __rawInputs__ = inputs`)
   lines.push(`${ind}const __output = await (async () => {`)
   if (node.data.kind === 'function') {
-    // Resolve the primary string value from any upstream shape
-    lines.push(`${ind}  const __v = __rawInputs__.value?.response ?? __rawInputs__.value?.result ?? __rawInputs__.value?.value ?? (typeof __rawInputs__.value === 'string' ? __rawInputs__.value : (__rawInputs__.value != null ? JSON.stringify(__rawInputs__.value) : ''))`)
-    // Shadow 'inputs' so inputs.value is always the resolved string, and all common
+    // Resolve the primary string value from any upstream shape.
+    // Falls back to searching all rawInputs values (for source-ID-keyed multi-input nodes).
+    lines.push(`${ind}  const __v = __rawInputs__.value?.response ?? __rawInputs__.value?.result ?? __rawInputs__.value?.content ?? __rawInputs__.value?.value ?? (typeof __rawInputs__.value === 'string' ? __rawInputs__.value : null) ?? Object.values(__rawInputs__).map(_rv => typeof _rv === 'string' ? _rv : (_rv && typeof _rv === 'object' ? (_rv.response ?? _rv.result ?? _rv.content ?? _rv.value ?? _rv.text) : null)).find(Boolean) ?? ''`)    // Shadow 'inputs' so inputs.value is always the resolved string, and all common
     // alias keys (text, content, data, etc.) point to the same resolved value by default.
     // __rawInputs__ spread last so actual upstream keys (topic, options, etc.) always win.
     // NOTE: we do NOT auto-destructure these names — user code may declare their own
@@ -481,10 +500,22 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
       const spSrcId = systemPromptSources.get(node.id)
       if (spSrcId) inputParts.push(`"__systemPrompt__": results[${JSON.stringify(spSrcId)}]?.system_prompt`)
       const inputsExpr = `{ ${inputParts.join(', ')} }`
+      const judgeUpstreamIds = judgeEdges.map(e => JSON.stringify(e.source))
       lines.push(`  try {`)
-      lines.push(`    if (typeof __notifyNode__ === 'function') await __notifyNode__(${nodeIdJson})`)
-      lines.push(`    results[${nodeIdJson}] = await ${fnName}(${inputsExpr})`)
-      lines.push(`    __trace__.push({ id: ${nodeIdJson}, label: ${nodeLabelJson}, kind: ${nodeKindJson}, output: results[${nodeIdJson}] })`)
+      if (judgeUpstreamIds.length > 0) {
+        lines.push(`    if ([${judgeUpstreamIds.join(', ')}].some(id => results[id]?.__error)) {`)
+        lines.push(`      results[${nodeIdJson}] = { __error: true, message: 'Skipped: upstream node failed' }`)
+        lines.push(`      __trace__.push({ id: ${nodeIdJson}, label: ${nodeLabelJson}, kind: ${nodeKindJson}, error: 'Skipped: upstream node failed', output: null })`)
+        lines.push(`    } else {`)
+        lines.push(`      if (typeof __notifyNode__ === 'function') await __notifyNode__(${nodeIdJson})`)
+        lines.push(`      results[${nodeIdJson}] = await ${fnName}(${inputsExpr})`)
+        lines.push(`      __trace__.push({ id: ${nodeIdJson}, label: ${nodeLabelJson}, kind: ${nodeKindJson}, output: results[${nodeIdJson}] })`)
+        lines.push(`    }`)
+      } else {
+        lines.push(`    if (typeof __notifyNode__ === 'function') await __notifyNode__(${nodeIdJson})`)
+        lines.push(`    results[${nodeIdJson}] = await ${fnName}(${inputsExpr})`)
+        lines.push(`    __trace__.push({ id: ${nodeIdJson}, label: ${nodeLabelJson}, kind: ${nodeKindJson}, output: results[${nodeIdJson}] })`)
+      }
       lines.push(`  } catch(__e) {`)
       lines.push(`    const __msg = __e instanceof Error ? __e.message : String(__e)`)
       lines.push(`    results[${nodeIdJson}] = { __error: true, message: __msg }`)

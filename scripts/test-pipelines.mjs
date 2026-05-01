@@ -165,7 +165,7 @@ const TESTS = [
   },
 
   {
-    name: 'Multi-input: two UI nodes → LLM',
+    name: 'Multi-input: two UI nodes → LLM (no error)',
     nodes: [
       { id: 'topic', type: 'ui', position: { x: 0, y: 0 }, data: { label: 'Topic', kind: 'ui', uiKind: 'text' } },
       { id: 'tone', type: 'ui', position: { x: 0, y: 150 }, data: { label: 'Tone', kind: 'ui', uiKind: 'text' } },
@@ -255,8 +255,83 @@ return { __html: '<div>' + bars + '</div>' }`,
       return true
     },
   },
-]
 
+  // ─── New tests for multi-input variable resolution ─────────────────────────
+
+  {
+    name: 'Multi-input: both {{topic}} and {{tone}} resolve correctly',
+    nodes: [
+      { id: 'topic', type: 'ui', position: { x: 0, y: 0 }, data: { label: 'Topic', kind: 'ui', uiKind: 'text' } },
+      { id: 'tone', type: 'ui', position: { x: 0, y: 150 }, data: { label: 'Tone', kind: 'ui', uiKind: 'text' } },
+      { id: 'n3', type: 'llm', position: { x: 250, y: 75 }, data: { label: 'Write', kind: 'llm', llmPromptTemplate: 'TOPIC=={{topic}}== TONE=={{tone}}==' } },
+      { id: 'n4', type: 'output', position: { x: 450, y: 75 }, data: { label: 'Out', kind: 'output' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'topic', target: 'n3' },
+      { id: 'e2', source: 'tone', target: 'n3' },
+      { id: 'e3', source: 'n3', target: 'n4' },
+    ],
+    uiInputs: { topic: { value: 'CATS' }, tone: { value: 'HUMOROUS' } },
+    // Use a mock that echoes the prompt back as the response
+    mockLLM: async (_model, prompt) => prompt,
+    expect: (result) => {
+      if (result.__error) throw new Error(`Pipeline errored: ${result.message}`)
+      const response = result?.response ?? result?.value?.response ?? JSON.stringify(result)
+      if (!response.includes('CATS')) throw new Error(`Expected CATS in prompt, got: ${response}`)
+      if (!response.includes('HUMOROUS')) throw new Error(`Expected HUMOROUS in prompt, got: ${response}`)
+      return true
+    },
+  },
+
+  {
+    name: 'Multi-input: function node receives both inputs',
+    nodes: [
+      { id: 'first', type: 'ui', position: { x: 0, y: 0 }, data: { label: 'First Name', kind: 'ui', uiKind: 'text' } },
+      { id: 'last', type: 'ui', position: { x: 0, y: 150 }, data: { label: 'Last Name', kind: 'ui', uiKind: 'text' } },
+      { id: 'fn', type: 'function', position: { x: 250, y: 75 }, data: {
+        label: 'Join',
+        kind: 'function',
+        // With source-ID keys, __rawInputs__ = { first: {value:'John'}, last: {value:'Doe'} }
+        // inputs alias sets value=__v (first found string from rawInputs), plus spreads all keys
+        code: 'const a = inputs.first?.value ?? inputs.first ?? ""; const b = inputs.last?.value ?? inputs.last ?? ""; return { full: a + " " + b }',
+      } },
+      { id: 'out', type: 'output', position: { x: 450, y: 75 }, data: { label: 'Out', kind: 'output' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'first', target: 'fn' },
+      { id: 'e2', source: 'last', target: 'fn' },
+      { id: 'e3', source: 'fn', target: 'out' },
+    ],
+    uiInputs: { first: { value: 'John' }, last: { value: 'Doe' } },
+    expect: (result) => {
+      if (result.__error) throw new Error(`Pipeline errored: ${result.message}`)
+      const full = result?.full ?? result?.value?.full
+      if (full !== 'John Doe') throw new Error(`Expected 'John Doe', got: ${JSON.stringify(result)}`)
+      return true
+    },
+  },
+
+  {
+    name: 'Judge upstream error: failing LLM skips judge',
+    nodes: [
+      { id: 'n1', type: 'function', position: { x: 0, y: 0 }, data: { label: 'Fail', kind: 'function', code: 'throw new Error("upstream boom")' } },
+      { id: 'n2', type: 'judge', position: { x: 250, y: 0 }, data: { label: 'Judge', kind: 'judge' } },
+      { id: 'n3', type: 'output', position: { x: 450, y: 0 }, data: { label: 'Out', kind: 'output' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'n1', target: 'n2' },
+      { id: 'e2', source: 'n2', target: 'n3' },
+    ],
+    uiInputs: {},
+    expect: (result, trace) => {
+      const judgeEntry = trace.find(t => t.id === 'n2')
+      if (!judgeEntry?.error?.includes('Skipped')) {
+        throw new Error(`Expected judge to be skipped, got: ${JSON.stringify(judgeEntry)}`)
+      }
+      return true
+    },
+  },
+]
 // ─── Runner ───────────────────────────────────────────────────────────────────
 
 const PASS = '\x1b[32m✓\x1b[0m'
@@ -272,7 +347,15 @@ console.log('\n\x1b[1mPromptFlow Pipeline Tests\x1b[0m\n')
 for (const test of TESTS) {
   try {
     const code = generateCode(test.nodes, test.edges)
-    const raw = await runCode(code, test.uiInputs)
+    const sandbox = buildSandbox(test.uiInputs)
+    if (test.mockLLM) {
+      sandbox.callLLM = test.mockLLM
+      sandbox.callLLMWithTools = test.mockLLM
+    }
+    const ctx = vm.createContext(sandbox)
+    const script = new vm.Script(`(async () => { ${code} })()`)
+    const promise = await script.runInContext(ctx, { timeout: 10000 })
+    const raw = await promise
     const result = raw?.__result
     const trace = raw?.__trace ?? []
     test.expect(result, trace)
