@@ -69,7 +69,10 @@ NODE KINDS AND THEIR DATA FIELDS:
 
 "function" — Runs JavaScript code to transform data.
   Extra data fields:
-    "code": "return { result: inputs.text.toUpperCase() }"
+    "code": "return { result: inputs.value.toUpperCase() }"
+  IMPORTANT: The primary incoming value always arrives at `inputs.value`. NEVER reference invented keys
+  like `inputs.answer` or `inputs.text` — always use `inputs.value` (or check it exists first).
+  If inputs.value is an object, access its content as `inputs.value?.response ?? inputs.value?.value ?? String(inputs.value)`.
 
 "decision" — Routes flow based on a condition. Produces true/false branches.
 
