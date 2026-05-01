@@ -24,7 +24,7 @@ interface Message {
   content: string
 }
 
-const VALID_KINDS: NodeKind[] = ['input', 'function', 'llm', 'decision', 'output', 'pipe', 'ui', 'mcp', 'state']
+const VALID_KINDS: NodeKind[] = ['input', 'function', 'llm', 'decision', 'output', 'pipe', 'ui', 'mcp', 'state', 'judge', 'note', 'chunker', 'systemprompt', 'workflow', 'trigger']
 
 const SYSTEM_PROMPT = `You are a PromptFlow Workflow Wizard. You help users design visual node-graph workflows.
 
@@ -73,6 +73,18 @@ NODE KINDS AND THEIR DATA FIELDS:
   IMPORTANT: The primary incoming value always arrives at inputs.value. NEVER reference invented keys
   like inputs.answer or inputs.text — always use inputs.value (or check it exists first).
   If inputs.value is an object, extract its content as: inputs.value?.response ?? inputs.value?.value ?? String(inputs.value)
+
+"judge" — Uses an LLM to evaluate content against criteria. Returns score (0-10), verdict, and reasoning.
+  Use for quality gates, CV scoring, content moderation, answer grading, etc.
+  The generator handles the LLM call automatically — DO NOT write any code for judge nodes.
+  Extra data fields:
+    "llmModel": ""   (leave blank for default)
+  Input keys used at runtime:
+    inputs.content  — the text/content to evaluate
+    inputs.criteria — the rubric or requirements to evaluate against
+  Output keys: { score: number, verdict: "pass"|"fail"|"review", reasoning: string }
+  TIP: Wire the content to evaluate into the "content" input edge, and criteria into the "criteria" input edge.
+  In the orchestrator, pass named keys: { "content": results["llm_extract"]?.["response"] ?? ..., "criteria": results["ui_requirements"]?.["value"] ?? ... }
 
 "decision" — Routes flow based on a condition. Produces true/false branches.
 
@@ -256,6 +268,12 @@ function sanitizeGraph(graph: { nodes: FlowNode[]; edges: FlowEdge[] }): {
         return 'inputs.value'
       })
       if (fixed !== data.code) data = { ...data, code: fixed }
+    }
+
+    // Fix judge nodes that have been given code — strip it, they're LLM-driven
+    if (data.kind === 'judge' && data.code) {
+      fixes.push(`"${data.label}": removed code from judge node (handled by generator)`)
+      data = { ...data, code: '' }
     }
 
     return data === n.data ? n : { ...n, data }
