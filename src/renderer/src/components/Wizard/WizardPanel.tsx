@@ -39,26 +39,62 @@ NODE SCHEMA:
   "data": {
     "label": "Display Name",
     "kind": "<kind>",
-    "description": "What this node does"
+    "description": "What this node does",
+    ...kind-specific fields (see below)
   }
 }
 
-NODE KINDS:
-- "input", "function", "llm", "decision", "output", "ui", "mcp", "pipe", "state"
+NODE KINDS AND THEIR DATA FIELDS:
+
+"ui" — RUNTIME user input. A dialog appears when the workflow runs asking the user to type/choose/upload.
+  ALWAYS use "ui" (NOT "input") when the user needs to provide a value each time the workflow runs.
+  Extra data fields:
+    "uiKind": "text" | "choice" | "file"   (default "text")
+    "uiLabel": "Prompt shown to user"
+    "uiPlaceholder": "Placeholder text"     (for text inputs)
+    "uiChoices": "Option A,Option B"        (for choice inputs, comma-separated)
+    "uiAccept": ".txt,.md,.pdf"             (for file inputs)
+
+"input" — STATIC value baked into the workflow at design time. Does NOT prompt the user at runtime.
+  Use only for fixed/hardcoded values.
+  Extra data fields:
+    "value": "the hardcoded text"
+
+"llm" — Calls an LLM with a prompt template. Use {{variableName}} for inputs from upstream nodes.
+  Extra data fields:
+    "llmPromptTemplate": "Write an article about {{topic}}."
+    "llmModel": ""   (leave blank for default)
+
+"output" — Final result displayed to the user. Usually the last node.
+
+"function" — Runs JavaScript code to transform data.
+  Extra data fields:
+    "code": "return { result: inputs.text.toUpperCase() }"
+
+"decision" — Routes flow based on a condition. Produces true/false branches.
+
+"pipe" — Passes data through unchanged, optionally renaming fields.
+
+"state" — Reads or writes persisted key-value state across runs.
+  Extra data fields:
+    "stateMode": "read" | "write"
+    "stateKey": "myKey"
 
 EDGE SCHEMA:
-{ "id": "unique-string", "source": "node-id", "target": "node-id" }
+{ "id": "e1", "source": "node-id", "target": "node-id" }
 
 LAYOUT GUIDELINES:
 - Use x: 100-1200, y: 100-600 with ~200px spacing between connected nodes
 - Left to right flow generally
 
 YOUR BEHAVIOUR:
-1. Ask 1-3 clarifying questions first.
+1. Ask 1-2 clarifying questions only if the request is genuinely ambiguous.
 2. Once you have enough info, produce the workflow as a JSON code block.
 3. Wrap JSON in: \`\`\`json ... \`\`\`
 4. The JSON must be: { "nodes": [...], "edges": [...] }
-5. Keep node counts reasonable (3-10 nodes).`
+5. Keep node counts reasonable (3-8 nodes).
+6. For LLM nodes, always write a meaningful llmPromptTemplate using {{variable}} placeholders.
+7. ALWAYS use "ui" nodes (not "input") for any value the user should provide at runtime.`
 
 const ANALYSIS_SYSTEM_PROMPT = `You are a PromptFlow workflow analyst. You will be given a description of a visual node-graph workflow and must analyse it for potential issues.
 
