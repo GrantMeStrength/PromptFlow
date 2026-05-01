@@ -274,16 +274,15 @@ function emitNodeBodyLines(
   //   • result = value            — assignment, returned via fallback
   const nodeCode = node.data.code || 'return inputs'
   lines.push(`${ind}let result`)
+  lines.push(`${ind}const __rawInputs__ = inputs`)
   lines.push(`${ind}const __output = await (async () => {`)
-  // For function nodes, inject a safe 'value' binding so wizard-generated code
-  // can use 'value' directly without worrying about key names or nesting.
   if (node.data.kind === 'function') {
-    lines.push(`${ind}  const __v = inputs.value?.response ?? inputs.value?.result ?? inputs.value?.value ?? (typeof inputs.value === 'string' ? inputs.value : (inputs.value != null ? JSON.stringify(inputs.value) : ''))`)
-    // Alias every key in inputs + common invented names so wizard-generated code
-    // works regardless of what key name the LLM hallucinated.
-    lines.push(`${ind}  const value = __v`)
-    lines.push(`${ind}  const _inp = new Proxy(inputs, { get(t,k) { if (k in t) return t[k]; return __v } })`)
-    lines.push(`${ind}  const { text=__v, content=__v, answer=__v, response=__v, result=__v, data=__v, input=__v, output=__v, query=__v, summary=__v, article=__v, tagline=__v, topic=__v, question=__v, message=__v } = _inp`)
+    // Resolve the primary string value from any upstream shape
+    lines.push(`${ind}  const __v = __rawInputs__.value?.response ?? __rawInputs__.value?.result ?? __rawInputs__.value?.value ?? (typeof __rawInputs__.value === 'string' ? __rawInputs__.value : (__rawInputs__.value != null ? JSON.stringify(__rawInputs__.value) : ''))`)
+    // Shadow 'inputs' so inputs.value is always the resolved string.
+    // Also destructure common hallucinated names so wizard code works regardless of key used.
+    lines.push(`${ind}  const inputs = { ...__rawInputs__, value: __v, text: __v, content: __v, answer: __v, response: __v, result: __v, data: __v, input: __v, output: __v, query: __v, summary: __v, article: __v, tagline: __v, topic: __v, question: __v, message: __v }`)
+    lines.push(`${ind}  const { value, text, content, answer, response, result, data, input, output, query, summary, article, tagline, topic, question, message } = inputs`)
   }
   for (const codeLine of nodeCode.split('\n')) {
     lines.push(`${ind}  ${codeLine}`)
