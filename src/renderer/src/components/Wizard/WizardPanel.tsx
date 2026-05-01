@@ -221,6 +221,42 @@ function extractGraph(text: string): { nodes: FlowNode[]; edges: FlowEdge[] } | 
   }
 }
 
+// Known safe inputs.* keys that the runtime injects — don't rewrite these.
+const SAFE_INPUT_KEYS = new Set(['value', '__systemPrompt__', '__rawInputs__'])
+
+/**
+ * Auto-corrects common wizard hallucinations in the generated graph:
+ * 1. Function node code: rewrite inputs.<invented_key> → inputs.value
+ * 2. Edges: strip sourceHandle / targetHandle
+ * Returns { graph, fixes } where fixes is a human-readable list of changes made.
+ */
+function sanitizeGraph(graph: { nodes: FlowNode[]; edges: FlowEdge[] }): {
+  graph: { nodes: FlowNode[]; edges: FlowEdge[] }
+  fixes: string[]
+} {
+  const fixes: string[] = []
+
+  const nodes = graph.nodes.map((n) => {
+    if (n.data.kind !== 'function' || !n.data.code) return n
+    // Replace inputs.<key> where key isn't a known safe key
+    const fixed = n.data.code.replace(/\binputs\.([a-zA-Z_]\w*)/g, (_match, key) => {
+      if (SAFE_INPUT_KEYS.has(key)) return `inputs.${key}`
+      fixes.push(`"${n.data.label}": inputs.${key} → inputs.value`)
+      return 'inputs.value'
+    })
+    if (fixed === n.data.code) return n
+    return { ...n, data: { ...n.data, code: fixed } }
+  })
+
+  const edges = graph.edges.map((e) => {
+    const { sourceHandle, targetHandle, ...rest } = e as FlowEdge & { sourceHandle?: string; targetHandle?: string }
+    if (sourceHandle || targetHandle) fixes.push(`edge ${e.id}: removed handle overrides`)
+    return rest as FlowEdge
+  })
+
+  return { graph: { nodes, edges }, fixes }
+}
+
 interface WizardPanelProps {
   onClose: () => void
 }
@@ -259,8 +295,17 @@ export function WizardPanel({ onClose }: WizardPanelProps) {
       const reply = response.result ?? ''
       const assistantMsg: Message = { role: 'assistant', content: reply }
       setMessages([...nextMessages, assistantMsg])
-      const graph = extractGraph(reply)
-      if (graph) setPendingGraph(graph)
+      const raw = extractGraph(reply)
+      if (raw) {
+        const { graph, fixes } = sanitizeGraph(raw)
+        setPendingGraph(graph)
+        if (fixes.length > 0) {
+          setMessages((prev) => [
+            ...prev,
+            { role: 'assistant', content: `🔧 **Auto-corrected ${fixes.length} issue${fixes.length > 1 ? 's' : ''}:**\n${fixes.map((f) => `- ${f}`).join('\n')}` },
+          ])
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'LLM error')
     } finally {
