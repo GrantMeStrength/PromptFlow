@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react'
 import { Play, X, MessageSquare, FileText, ListChecks, Files, Loader2 } from 'lucide-react'
 import { useFlowStore } from '../../store/flowStore'
+import { extractPdfText } from '../../utils/extractPdfText'
 
 type FileEntry = { filename: string; content: string; value: string; type: string; size: number }
 
@@ -24,14 +25,10 @@ export default function UIInputModal() {
   const readFileToEntry = async (file: File): Promise<FileEntry> => {
     const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
     let content: string
-    if (isPdf) {
-      content = `[PDF text extraction is not supported. Please convert "${file.name}" to .txt or .md before uploading.]`
-    } else {
-      try {
-        content = await file.text()
-      } catch {
-        content = `[Error reading file "${file.name}"]`
-      }
+    try {
+      content = isPdf ? await extractPdfText(file) : await file.text()
+    } catch (err) {
+      content = `[Error reading file "${file.name}": ${err instanceof Error ? err.message : String(err)}]`
     }
     return { filename: file.name, type: file.type, size: file.size, content, value: content }
   }

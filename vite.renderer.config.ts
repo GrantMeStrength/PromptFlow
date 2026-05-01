@@ -17,7 +17,7 @@ export default defineConfig({
           if (id.includes('node_modules/reactflow') || id.includes('node_modules/@reactflow')) return 'vendor-reactflow'
           if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/')) return 'vendor-react'
           if (id.includes('node_modules/lucide-react')) return 'vendor-lucide'
-          if (id.includes('node_modules/zustand')) return 'vendor-zustand'
+          if (id.includes('node_modules/pdfjs-dist')) return 'vendor-pdfjs'
         },
       },
     },
