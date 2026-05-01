@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import { applyNodeChanges, applyEdgeChanges } from 'reactflow'
 import type { Connection, NodeChange, EdgeChange } from 'reactflow'
 import type { FlowNode, FlowEdge, FlowProject, NodeData, NodeKind } from '../types'
-import { demoProject } from '../demo/documentAnalysis'
 import { generateCode } from '../codegen/generator'
 
 interface FlowState {
@@ -212,10 +211,21 @@ const defaultNodeData = (kind: NodeKind): NodeData => {
 
 let nodeCounter = 100
 
+const blankProject: FlowProject = {
+  id: crypto.randomUUID(),
+  name: 'Untitled Project',
+  description: '',
+  version: '1',
+  created: new Date().toISOString(),
+  updated: new Date().toISOString(),
+  nodes: [],
+  edges: [],
+}
+
 export const useFlowStore = create<FlowState>((set, get) => ({
-  project: demoProject,
-  nodes: demoProject.nodes,
-  edges: demoProject.edges,
+  project: blankProject,
+  nodes: [],
+  edges: [],
   selectedNodeId: null,
   isRunning: false,
   runOutput: '',

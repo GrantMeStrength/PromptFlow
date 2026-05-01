@@ -237,6 +237,33 @@ function emitNodeBodyLines(
       }))
       lines.push(`${ind}const mcpConfigs = ${JSON.stringify(configs)}`)
     }
+
+    // When no custom code is provided, auto-generate a standard LLM call that:
+    // • substitutes all {{var}} placeholders from inputs
+    // • calls callLLM (or callLLMWithTools if MCP nodes are wired)
+    // • returns under the first declared output name, or 'response'
+    if (!node.data.code) {
+      const templateVars = [...tmpl.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1])
+      const outputKey = (node.data.outputs && node.data.outputs.length > 0)
+        ? node.data.outputs[0].name
+        : 'response'
+      lines.push(`${ind}let _llmPrompt = llmPromptTemplate`)
+      for (const v of templateVars) {
+        lines.push(`${ind}_llmPrompt = _llmPrompt.replace('{{${v}}}', String(inputs.${v} ?? ''))`)
+      }
+      // Catch-all for {{text}} / {{value}} / {{content}} if not already handled
+      if (!templateVars.includes('text')) {
+        lines.push(`${ind}_llmPrompt = _llmPrompt.replace('{{text}}', String(inputs.text ?? inputs.value ?? inputs.content ?? ''))`)
+      }
+      lines.push(`${ind}const _llmSys = typeof llmSystemPrompt !== 'undefined' ? llmSystemPrompt : undefined`)
+      lines.push(`${ind}const _llmMcp = typeof mcpConfigs !== 'undefined' ? mcpConfigs : []`)
+      lines.push(`${ind}const _llmFmt = typeof llmResponseFormat !== 'undefined' ? llmResponseFormat : undefined`)
+      lines.push(`${ind}const _llmResp = _llmMcp.length > 0`)
+      lines.push(`${ind}  ? await callLLMWithTools(llmModel, _llmPrompt, _llmSys, _llmMcp)`)
+      lines.push(`${ind}  : await callLLM(llmModel, _llmPrompt, _llmSys, _llmFmt)`)
+      lines.push(`${ind}return { ${JSON.stringify(outputKey)}: _llmResp }`)
+      return
+    }
   }
 
   // Wrap user code in an inner async IIFE so BOTH coding patterns work:

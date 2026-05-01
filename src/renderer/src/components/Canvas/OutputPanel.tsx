@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { X, FileDown, FileText, Bug } from 'lucide-react'
+import { X, FileDown, FileText, Bug, Loader2 } from 'lucide-react'
 import { useFlowStore } from '../../store/flowStore'
 
 interface OutputPanelProps {
@@ -51,6 +51,11 @@ export function OutputPanel({ onClose }: OutputPanelProps) {
   const [tab, setTab] = useState<'output' | 'trace'>('output')
   const [exporting, setExporting] = useState<'html' | 'pdf' | null>(null)
 
+  // Switch to output tab and scroll to bottom when pipeline starts running
+  React.useEffect(() => {
+    if (isRunning) setTab('output')
+  }, [isRunning])
+
   const handleSaveHtml = async () => {
     if (!runOutput) return
     setExporting('html')
@@ -75,7 +80,14 @@ export function OutputPanel({ onClose }: OutputPanelProps) {
     <div className="h-64 bg-[#080810] border-t border-[#2a2a3f] flex flex-col font-mono">
       <div className="flex items-center justify-between px-4 py-2 border-b border-[#2a2a3f] shrink-0">
         <div className="flex items-center gap-3">
-          <div className={`w-2 h-2 rounded-full ${isRunning ? 'bg-green-400 animate-pulse' : 'bg-slate-600'}`} />
+          {isRunning ? (
+            <span className="flex items-center gap-1.5 text-[11px] text-green-400 font-sans">
+              <Loader2 size={12} className="animate-spin" />
+              Running…
+            </span>
+          ) : (
+            <div className="w-2 h-2 rounded-full bg-slate-600" />
+          )}
           {/* Tabs */}
           <button
             onClick={() => setTab('output')}

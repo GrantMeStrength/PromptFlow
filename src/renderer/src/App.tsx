@@ -16,7 +16,7 @@ export default function App() {
   const { showOutput, toggleOutput } = useFlowStore()
   const [showCode, setShowCode] = React.useState(false)
   const [showSettings, setShowSettings] = React.useState(false)
-  const [showLibrary, setShowLibrary] = React.useState(false)
+  const [showLibrary, setShowLibrary] = React.useState(true) // open on startup
   const [showWizard, setShowWizard] = React.useState(false)
 
   return (
