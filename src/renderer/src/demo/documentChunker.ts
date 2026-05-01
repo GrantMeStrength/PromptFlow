@@ -23,23 +23,30 @@ export const documentChunkerDemo: FlowProject = {
         code: '',
         prompt: '',
         noteText:
-          'Demonstrates the Document Chunker node. Paste any long text (articles, reports, transcripts). The Chunker splits it into manageable paragraphs, each chunk is summarised independently by an LLM, then a second LLM pass combines those summaries into a single executive summary.',
+          'Upload any .txt or .md file (articles, reports, transcripts). The Chunker splits it into manageable paragraphs, each chunk is summarised independently by an LLM, then a second LLM pass combines those summaries into a single executive summary.',
       },
     },
 
-    // ── Input ─────────────────────────────────────────────────────────────────
+    // ── File Upload ───────────────────────────────────────────────────────────
     {
       id: 'node-input',
-      type: 'input',
+      type: 'ui',
       position: { x: 60, y: 80 },
       data: {
-        label: 'Document Input',
-        kind: 'input',
-        description: 'Paste the long document text here. In a real app this would be a file-upload UI node.',
+        label: 'Document Upload',
+        kind: 'ui',
+        description: 'Upload a .txt or .md file containing the document you want to summarise.',
         inputs: [],
-        outputs: [{ name: 'text', type: 'string', description: 'The full document text' }],
-        code: `return { text: inputs.text ?? '' }`,
-        prompt: 'Input node for a long text document',
+        outputs: [
+          { name: 'content', type: 'string', description: 'Full text content of the uploaded file' },
+          { name: 'filename', type: 'string', description: 'Original filename' },
+        ],
+        code: '',
+        prompt: '',
+        uiKind: 'file',
+        uiLabel: 'Upload document',
+        uiAccept: '.txt,.md,.pdf',
+        uiMultiple: false,
       },
     },
 
@@ -165,8 +172,8 @@ return { stats: { words, chars, chunks: inputs.count ?? 0 } }`,
   ],
 
   edges: [
-    // Input → Chunker
-    { id: 'e1', source: 'node-input', target: 'node-chunker', sourceHandle: 'text', targetHandle: 'text' },
+    // Document Upload → Chunker
+    { id: 'e1', source: 'node-input', target: 'node-chunker', sourceHandle: 'content', targetHandle: 'text' },
     // Chunker → Chunk Summariser
     { id: 'e2', source: 'node-chunker', target: 'node-chunk-summariser', sourceHandle: 'chunks', targetHandle: 'chunks' },
     // Chunk Summariser → Final Summary
