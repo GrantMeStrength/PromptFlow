@@ -223,6 +223,7 @@ interface LLMSettings {
   apiKey: string
   baseURL: string
   defaultModel: string
+  anthropicApiKey?: string
 }
 
 function settingsPath(): string {
@@ -232,9 +233,9 @@ function settingsPath(): string {
 function loadSettings(): LLMSettings {
   try {
     const raw = fs.readFileSync(settingsPath(), 'utf8')
-    return { apiKey: '', baseURL: 'https://api.openai.com/v1', defaultModel: 'gpt-4o-mini', ...JSON.parse(raw) }
+    return { apiKey: '', baseURL: 'https://api.openai.com/v1', defaultModel: 'gpt-4o-mini', anthropicApiKey: '', ...JSON.parse(raw) }
   } catch {
-    return { apiKey: '', baseURL: 'https://api.openai.com/v1', defaultModel: 'gpt-4o-mini' }
+    return { apiKey: '', baseURL: 'https://api.openai.com/v1', defaultModel: 'gpt-4o-mini', anthropicApiKey: '' }
   }
 }
 
@@ -243,11 +244,50 @@ function saveSettings(settings: LLMSettings): void {
   fs.writeFileSync(settingsPath(), JSON.stringify(settings, null, 2), 'utf8')
 }
 
-async function callLLM(model: string, prompt: string, systemPrompt?: string): Promise<string> {
+// responseFormat: e.g. { type: 'json_object' } or { type: 'json_schema', json_schema: {...} }
+async function callLLM(model: string, prompt: string, systemPrompt?: string, responseFormat?: Record<string, unknown>): Promise<string> {
   const settings = loadSettings()
 
+  // Anthropic: model prefixed with "anthropic/" — route to Anthropic Messages API
+  const isAnthropic = model.startsWith('anthropic/')
   // Ollama: model is prefixed with "ollama/" — route to local Ollama, no API key needed
   const isOllama = model.startsWith('ollama/')
+
+  if (isAnthropic) {
+    const resolvedModel = model.slice('anthropic/'.length) || 'claude-3-5-sonnet-20241022'
+    const anthropicKey = settings.anthropicApiKey
+    if (!anthropicKey) throw new Error('No Anthropic API key configured — open Settings (⚙) to add one.')
+
+    // For Anthropic, JSON mode is achieved via system prompt instruction
+    const effectiveSystem = responseFormat
+      ? `${systemPrompt ?? ''}\n\nYou must respond with valid JSON only. Do not include any prose, markdown fencing, or explanation outside the JSON.`.trim()
+      : systemPrompt
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': anthropicKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: resolvedModel,
+        max_tokens: 4000,
+        messages: [{ role: 'user', content: prompt }],
+        ...(effectiveSystem ? { system: effectiveSystem } : {}),
+      }),
+    })
+    if (!response.ok) {
+      const text = await response.text()
+      let hint = ''
+      if (response.status === 401) hint = ' (Check your Anthropic API key in Settings.)'
+      else if (response.status === 429) hint = ' (Rate limit hit — try again in a moment.)'
+      throw new Error(`Anthropic API error ${response.status}${hint}\n${text}`)
+    }
+    const data = await response.json() as { content: Array<{ type: string; text: string }> }
+    return data.content.find(c => c.type === 'text')?.text ?? ''
+  }
+
   const resolvedModel = isOllama
     ? model.slice('ollama/'.length) || 'llama3.2'
     : model || settings.defaultModel || 'gpt-4o-mini'
@@ -265,10 +305,14 @@ async function callLLM(model: string, prompt: string, systemPrompt?: string): Pr
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (!isOllama) headers['Authorization'] = `Bearer ${settings.apiKey}`
 
+  const body: Record<string, unknown> = { model: resolvedModel, messages, max_tokens: 2000 }
+  if (responseFormat && !isOllama) body.response_format = responseFormat
+  else if (responseFormat && isOllama) body.format = 'json'
+
   const response = await fetch(`${baseURL}/chat/completions`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ model: resolvedModel, messages, max_tokens: 2000 }),
+    body: JSON.stringify(body),
   })
   if (!response.ok) {
     const text = await response.text()
@@ -514,8 +558,8 @@ ipcMain.handle('run-code', async (_event, code: string, input: unknown, uiInputs
       encodeURIComponent,
       decodeURIComponent,
       // Inject callLLM so generated LLM node code can call the real API
-      callLLM: (model: string, prompt: string, systemPrompt?: string) =>
-        callLLM(model, prompt, systemPrompt),
+      callLLM: (model: string, prompt: string, systemPrompt?: string, responseFormat?: Record<string, unknown>) =>
+        callLLM(model, prompt, systemPrompt, responseFormat),
       // Inject callLLMWithTools for LLM nodes connected to MCP servers
       callLLMWithTools: (model: string, prompt: string, systemPrompt: string | undefined, mcpConfigs: McpConfig[]) =>
         callLLMWithTools(model, prompt, systemPrompt, mcpConfigs),
@@ -792,8 +836,8 @@ async function runScheduledProject(project: FlowProject, nodeId: string) {
       Date, Math, JSON, Array, Object, String, Number, Boolean, Set, Map,
       Promise, RegExp, Error, parseInt, parseFloat, isNaN, isFinite,
       encodeURIComponent, decodeURIComponent,
-      callLLM: (model: string, prompt: string, systemPrompt?: string) =>
-        callLLM(model, prompt, systemPrompt),
+      callLLM: (model: string, prompt: string, systemPrompt?: string, responseFormat?: Record<string, unknown>) =>
+        callLLM(model, prompt, systemPrompt, responseFormat),
       callLLMWithTools: (model: string, prompt: string, systemPrompt: string | undefined, mcpConfigs: McpConfig[]) =>
         callLLMWithTools(model, prompt, systemPrompt, mcpConfigs),
       getState: (k: string, def: unknown = null) => readStateVar(`${project.id}::${k}`, def),

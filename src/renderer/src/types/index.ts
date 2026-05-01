@@ -10,7 +10,7 @@ export interface PortDef {
 
 // ─── Node Types ───────────────────────────────────────────────────────────────
 
-export type NodeKind = 'input' | 'function' | 'llm' | 'decision' | 'output' | 'pipe' | 'ui' | 'mcp' | 'note' | 'state' | 'workflow' | 'trigger'
+export type NodeKind = 'input' | 'function' | 'llm' | 'decision' | 'output' | 'pipe' | 'ui' | 'mcp' | 'note' | 'state' | 'workflow' | 'trigger' | 'systemprompt' | 'judge'
 
 export interface NodeData {
   label: string
@@ -22,12 +22,16 @@ export interface NodeData {
   outputs: PortDef[]
   /** The natural-language prompt used to generate/last-modify this node */
   prompt?: string
-  /** LLM provider: 'default' uses API settings, 'ollama' uses local Ollama */
-  llmProvider?: 'default' | 'ollama'
+  /** LLM provider: 'default' uses API settings, 'ollama' uses local Ollama, 'anthropic' uses Anthropic Claude */
+  llmProvider?: 'default' | 'ollama' | 'anthropic'
   llmModel?: string
   llmPromptTemplate?: string
   llmSkillsFile?: string    // display name of loaded .md file
   llmSkillsContent?: string // full markdown content used as system prompt
+  /** When true, instructs the LLM to return valid JSON */
+  llmJsonMode?: boolean
+  /** JSON Schema string — when set, OpenAI structured output is used */
+  llmStructuredSchema?: string
   /** For decision nodes: names of the output branches */
   branches?: string[]
   /** Execution result from last run */
@@ -61,6 +65,8 @@ export interface NodeData {
   /** For trigger (scheduler) nodes */
   cronExpr?: string          // cron expression e.g. "0 9 * * 1-5"
   triggerEnabled?: boolean   // whether the schedule is active
+  /** For system prompt nodes */
+  systemPromptContent?: string  // the system prompt text
 }
 
 export interface McpToolInfo {
@@ -107,6 +113,7 @@ export interface LLMSettings {
   apiKey: string
   baseURL: string
   defaultModel: string
+  anthropicApiKey?: string
 }
 
 // ─── Chat Message ─────────────────────────────────────────────────────────────

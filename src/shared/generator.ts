@@ -47,6 +47,7 @@ function buildEdgeMaps(nodes: FlowNode[], edges: FlowEdge[], execIds: Set<string
   const nodeById = new Map(nodes.map(n => [n.id, n]))
   const inputSources = new Map<string, Map<string, { srcId: string; handle: string; explicit: boolean }>>()
   const mcpSources = new Map<string, NodeData[]>()
+  const systemPromptSources = new Map<string, string>() // targetNodeId → sourceNodeId
 
   for (const e of edges) {
     const srcNode = nodeById.get(e.source)
@@ -55,6 +56,9 @@ function buildEdgeMaps(nodes: FlowNode[], edges: FlowEdge[], execIds: Set<string
     if (srcNode.data.kind === 'mcp') {
       if (!mcpSources.has(e.target)) mcpSources.set(e.target, [])
       mcpSources.get(e.target)!.push(srcNode.data)
+    } else if (srcNode.data.kind === 'systemprompt' && (nodeById.get(e.target)?.data.kind === 'llm' || nodeById.get(e.target)?.data.kind === 'judge')) {
+      // Wire system prompt node → llm/judge node
+      systemPromptSources.set(e.target, e.source)
     } else if (execIds.has(e.source) && execIds.has(e.target)) {
       if (!inputSources.has(e.target)) inputSources.set(e.target, new Map())
       inputSources.get(e.target)!.set(
@@ -70,7 +74,7 @@ function buildEdgeMaps(nodes: FlowNode[], edges: FlowEdge[], execIds: Set<string
     }
   }
 
-  return { inputSources, mcpSources }
+  return { inputSources, mcpSources, systemPromptSources }
 }
 
 // ─── Node Body Emitter (shared by main pipeline and sub-workflows) ─────────────
@@ -78,6 +82,7 @@ function buildEdgeMaps(nodes: FlowNode[], edges: FlowEdge[], execIds: Set<string
 function emitNodeBodyLines(
   node: FlowNode,
   mcpSources: Map<string, NodeData[]>,
+  systemPromptSources: Map<string, string>,
   lines: string[],
   ind: string
 ): void {
@@ -115,17 +120,68 @@ function emitNodeBodyLines(
     return
   }
 
+  if (node.data.kind === 'systemprompt') {
+    const content = node.data.systemPromptContent ?? ''
+    lines.push(`${ind}return { system_prompt: ${JSON.stringify(content)} }`)
+    return
+  }
+
+  if (node.data.kind === 'judge') {
+    const provider = node.data.llmProvider ?? 'default'
+    const rawModel = node.data.llmModel || (provider === 'ollama' ? 'llama3.2' : provider === 'anthropic' ? 'claude-3-5-sonnet-20241022' : 'gpt-4o-mini')
+    const modelPrefix = provider === 'ollama' ? 'ollama/' : provider === 'anthropic' ? 'anthropic/' : ''
+    const modelStr = `${modelPrefix}${rawModel}`
+    const spSrcId = systemPromptSources.get(node.id)
+
+    lines.push(`${ind}const judgeModel = ${JSON.stringify(modelStr)}`)
+    if (spSrcId) {
+      // System prompt is injected via inputs.__systemPrompt__ from the orchestrator
+      lines.push(`${ind}const judgeSystemPrompt = inputs.__systemPrompt__ ?? "You are an impartial AI evaluator. Evaluate the provided content against the given criteria and respond ONLY with a JSON object containing: score (0-10 integer), verdict ('pass'|'fail'|'review'), reasoning (string)."`)
+    } else {
+      lines.push(`${ind}const judgeSystemPrompt = "You are an impartial AI evaluator. Evaluate the provided content against the given criteria and respond ONLY with a JSON object containing: score (0-10 integer), verdict ('pass'|'fail'|'review'), reasoning (string)."`)
+    }
+    lines.push(`${ind}const judgeContent = inputs.content ?? inputs.value ?? ''`)
+    lines.push(`${ind}const judgeCriteria = inputs.criteria ?? ''`)
+    lines.push(`${ind}const judgePrompt = judgeCriteria ? \`Evaluate this content:\\n\\n\${judgeContent}\\n\\nCriteria: \${judgeCriteria}\` : \`Evaluate this content:\\n\\n\${judgeContent}\``)
+    lines.push(`${ind}const judgeRaw = await callLLM(judgeModel, judgePrompt, judgeSystemPrompt, { type: 'json_object' })`)
+    lines.push(`${ind}let judgeResult`)
+    lines.push(`${ind}try { judgeResult = JSON.parse(judgeRaw) } catch { judgeResult = { score: null, verdict: 'review', reasoning: judgeRaw } }`)
+    lines.push(`${ind}return { score: judgeResult.score ?? null, verdict: judgeResult.verdict ?? 'review', reasoning: judgeResult.reasoning ?? judgeRaw }`)
+    return
+  }
+
   if (node.data.kind === 'llm') {
     const provider = node.data.llmProvider ?? 'default'
-    const rawModel = node.data.llmModel || (provider === 'ollama' ? 'llama3.2' : 'gpt-4o-mini')
-    const model = (provider === 'ollama' ? `ollama/${rawModel}` : rawModel).replace(/`/g, '\\`')
-    const tmpl = (node.data.llmPromptTemplate || '{{text}}').replace(/`/g, '\\`')
-    lines.push(`${ind}const llmModel = \`${model}\``)
-    lines.push(`${ind}const llmPromptTemplate = \`${tmpl}\``)
-    if (node.data.llmSkillsContent) {
-      const skills = node.data.llmSkillsContent.replace(/`/g, '\\`')
-      lines.push(`${ind}const llmSystemPrompt = \`${skills}\``)
+    const rawModel = node.data.llmModel || (provider === 'ollama' ? 'llama3.2' : provider === 'anthropic' ? 'claude-3-5-sonnet-20241022' : 'gpt-4o-mini')
+    const modelPrefix = provider === 'ollama' ? 'ollama/' : provider === 'anthropic' ? 'anthropic/' : ''
+    const modelStr = `${modelPrefix}${rawModel}`
+    const tmpl = node.data.llmPromptTemplate || '{{text}}'
+    lines.push(`${ind}const llmModel = ${JSON.stringify(modelStr)}`)
+    lines.push(`${ind}const llmPromptTemplate = ${JSON.stringify(tmpl)}`)
+
+    const spSrcId = systemPromptSources.get(node.id)
+    if (spSrcId) {
+      // System prompt is injected via inputs.__systemPrompt__ from the orchestrator
+      lines.push(`${ind}const llmSystemPrompt = inputs.__systemPrompt__ ?? ${JSON.stringify(node.data.llmSkillsContent ?? '')}`)
+    } else if (node.data.llmSkillsContent) {
+      lines.push(`${ind}const llmSystemPrompt = ${JSON.stringify(node.data.llmSkillsContent)}`)
     }
+
+    // Structured output / JSON mode
+    let responseFormatExpr = 'undefined'
+    if (node.data.llmStructuredSchema) {
+      let schema: unknown
+      try { schema = JSON.parse(node.data.llmStructuredSchema) } catch { schema = null }
+      if (schema) {
+        responseFormatExpr = JSON.stringify({ type: 'json_schema', json_schema: { name: 'output', strict: true, schema } })
+      }
+    } else if (node.data.llmJsonMode) {
+      responseFormatExpr = JSON.stringify({ type: 'json_object' })
+    }
+    if (responseFormatExpr !== 'undefined') {
+      lines.push(`${ind}const llmResponseFormat = ${responseFormatExpr}`)
+    }
+
     const mcpList = mcpSources.get(node.id) ?? []
     if (mcpList.length > 0) {
       const configs = mcpList.map(d => ({
@@ -172,7 +228,7 @@ function generateSubWorkflowIIFE(
   if (sorted.length === 0) return [`${ind}return null`]
 
   const execIds = new Set(sorted.map(n => n.id))
-  const { inputSources, mcpSources } = buildEdgeMaps(nodes, edges, execIds)
+  const { inputSources, mcpSources, systemPromptSources } = buildEdgeMaps(nodes, edges, execIds)
   const lines: string[] = []
 
   lines.push(`${ind}const _r = {}`)
@@ -212,7 +268,7 @@ function generateSubWorkflowIIFE(
       }
     } else {
       lines.push(`${ind}async function ${fnId}(inputs) {`)
-      emitNodeBodyLines(node, mcpSources, lines, ind + '  ')
+      emitNodeBodyLines(node, mcpSources, systemPromptSources, lines, ind + '  ')
       lines.push(`${ind}}`)
       const sources = inputSources.get(node.id)
       const inputParts: string[] = []
@@ -221,6 +277,11 @@ function generateSubWorkflowIIFE(
           const ref = `_r["${srcId}"]`
           inputParts.push(explicit ? `"${targetHandle}": ${ref}?.["${handle}"]` : `"${targetHandle}": ${ref}?.["${handle}"] ?? ${ref}`)
         }
+      }
+      // Inject system prompt from connected systemprompt node
+      const spSrcId = systemPromptSources.get(node.id)
+      if (spSrcId) {
+        inputParts.push(`"__systemPrompt__": _r[${JSON.stringify(spSrcId)}]?.system_prompt`)
       }
       if (node.data.kind === 'ui') {
         lines.push(`${ind}_r["${node.id}"] = await ${fnId}({})`)
@@ -259,7 +320,7 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
 
   // Build node-by-id map (includes mcp nodes for config lookup)
   const execIds = new Set(sorted.map(n => n.id))
-  const { inputSources, mcpSources } = buildEdgeMaps(nodes, edges, execIds)
+  const { inputSources, mcpSources, systemPromptSources } = buildEdgeMaps(nodes, edges, execIds)
 
   const lines: string[] = []
   lines.push(`// ═══════════════════════════════════════════════════`)
@@ -291,7 +352,7 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
         lines.push(`  })(inputs)`)
       }
     } else {
-      emitNodeBodyLines(node, mcpSources, lines, '  ')
+      emitNodeBodyLines(node, mcpSources, systemPromptSources, lines, '  ')
     }
 
     lines.push(`}`)
@@ -326,6 +387,11 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
           }
         }
       }
+      // If this node has a connected system prompt node, inject it as __systemPrompt__
+      const spSrcId = systemPromptSources.get(node.id)
+      if (spSrcId) {
+        inputParts.push(`"__systemPrompt__": results[${JSON.stringify(spSrcId)}]?.system_prompt`)
+      }
       const inputsExpr = `{ ${inputParts.join(', ')} }`
       lines.push(`  results["${node.id}"] = await ${fnName}(${inputsExpr})`)
     }
@@ -347,4 +413,3 @@ function nodeToFnName(id: string, label: string): string {
   const clean = label.replace(/[^a-zA-Z0-9]/g, '_').replace(/^_+|_+$/g, '')
   return `${clean}_${id.replace(/-/g, '_')}`
 }
-

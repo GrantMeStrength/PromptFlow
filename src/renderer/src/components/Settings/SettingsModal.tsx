@@ -10,6 +10,7 @@ const DEFAULTS: LLMSettings = {
   apiKey: '',
   baseURL: 'https://api.openai.com/v1',
   defaultModel: 'gpt-4o-mini',
+  anthropicApiKey: '',
 }
 
 const PROVIDER_PRESETS = [
@@ -21,6 +22,7 @@ const PROVIDER_PRESETS = [
 export function SettingsModal({ onClose }: Props) {
   const [form, setForm] = useState<LLMSettings>(DEFAULTS)
   const [showKey, setShowKey] = useState(false)
+  const [showAnthropicKey, setShowAnthropicKey] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
@@ -130,6 +132,30 @@ export function SettingsModal({ onClose }: Props) {
               placeholder="gpt-4o-mini"
               className="w-full bg-[#0d0d1a] border border-[#2a2a4f] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
             />
+          </div>
+
+          {/* Anthropic API Key */}
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1.5">
+              Anthropic API Key
+              <span className="ml-1.5 text-[10px] text-slate-600 font-normal">for claude-* models</span>
+            </label>
+            <div className="relative">
+              <input
+                type={showAnthropicKey ? 'text' : 'password'}
+                value={form.anthropicApiKey ?? ''}
+                onChange={(e) => setForm((f) => ({ ...f, anthropicApiKey: e.target.value }))}
+                placeholder="sk-ant-…"
+                className="w-full bg-[#0d0d1a] border border-[#2a2a4f] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 pr-10"
+              />
+              <button
+                onClick={() => setShowAnthropicKey((v) => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                type="button"
+              >
+                {showAnthropicKey ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
           </div>
         </div>
 

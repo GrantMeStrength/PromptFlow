@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import Editor from '@monaco-editor/react'
-import { X, Trash2, ChevronDown, ChevronUp, Zap, RotateCcw, Loader2, ArrowRightLeft, Sparkles, BookMarked, FolderOpen, Plug, CheckCircle, AlertCircle, Database, Layers, RefreshCw, Clock } from 'lucide-react'
+import { X, Trash2, ChevronDown, ChevronUp, Zap, RotateCcw, Loader2, ArrowRightLeft, Sparkles, BookMarked, FolderOpen, Plug, CheckCircle, AlertCircle, Database, Layers, RefreshCw, Clock, Scale } from 'lucide-react'
 import { useFlowStore } from '../../store/flowStore'
-import type { NodeKind, PortDef, FlowProject } from '../../types'
+import type { NodeKind, NodeData, PortDef, FlowProject } from '../../types'
 
 const REGEN_SYSTEM_PROMPT = `You are updating a single node in PromptFlow, a node-graph IDE.
 The user has described what they want the node to do. Update the node accordingly.
@@ -39,6 +39,8 @@ const kindColors: Record<NodeKind, string> = {
   note: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40',
   workflow: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
   trigger: 'bg-slate-500/20 text-slate-300 border-slate-500/40',
+  systemprompt: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
+  judge: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
 }
 
 function PortList({ ports, label }: { ports: PortDef[]; label: string }) {
@@ -497,17 +499,18 @@ export function NodeInspector() {
                 <select
                   className="flex-1 bg-[#0f0f1a] text-slate-300 text-xs rounded px-2 py-1 border border-[#2a2a3f] focus:border-indigo-500 outline-none"
                   value={data.llmProvider ?? 'default'}
-                  onChange={(e) => updateNodeData(node.id, { llmProvider: e.target.value as 'default' | 'ollama' })}
+                  onChange={(e) => updateNodeData(node.id, { llmProvider: e.target.value as NodeData['llmProvider'] })}
                 >
                   <option value="default">OpenAI / API settings</option>
                   <option value="ollama">Ollama (local)</option>
+                  <option value="anthropic">Anthropic (Claude)</option>
                 </select>
               </div>
               <div className="flex items-center gap-2 mt-2">
                 <label className="text-[11px] text-slate-500">Model</label>
                 <input
                   className="flex-1 bg-[#0f0f1a] text-slate-300 text-xs rounded px-2 py-1 border border-[#2a2a3f] focus:border-indigo-500 outline-none font-mono"
-                  placeholder={(data.llmProvider === 'ollama') ? 'llama3.2' : 'gpt-4o-mini'}
+                  placeholder={data.llmProvider === 'ollama' ? 'llama3.2' : data.llmProvider === 'anthropic' ? 'claude-3-5-haiku-20241022' : 'gpt-4o-mini'}
                   value={data.llmModel ?? ''}
                   onChange={(e) => updateNodeData(node.id, { llmModel: e.target.value })}
                 />
@@ -516,6 +519,42 @@ export function NodeInspector() {
                 <p className="text-[10px] text-slate-600 mt-1">
                   Requires <span className="text-slate-400 font-mono">ollama serve</span> running locally. Model must be pulled (e.g. <span className="font-mono text-slate-400">ollama pull llama3.2</span>).
                 </p>
+              )}
+              {data.llmProvider === 'anthropic' && (
+                <p className="text-[10px] text-slate-600 mt-1">
+                  Requires an Anthropic API key in Settings. e.g. <span className="font-mono text-slate-400">claude-3-5-sonnet-20241022</span>, <span className="font-mono text-slate-400">claude-3-5-haiku-20241022</span>.
+                </p>
+              )}
+
+              {/* JSON mode */}
+              <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#2a2a3f]">
+                <div>
+                  <span className="text-[11px] text-slate-400">JSON Output Mode</span>
+                  <p className="text-[10px] text-slate-600">Force the model to return valid JSON</p>
+                </div>
+                <button
+                  onClick={() => updateNodeData(node.id, { llmJsonMode: !data.llmJsonMode })}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${data.llmJsonMode ? 'bg-indigo-600' : 'bg-slate-700'}`}
+                >
+                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${data.llmJsonMode ? 'translate-x-4' : 'translate-x-1'}`} />
+                </button>
+              </div>
+              {data.llmJsonMode && (
+                <div className="mt-2">
+                  <label className="text-[11px] uppercase tracking-widest text-slate-500 block mb-1">
+                    JSON Schema (optional)
+                  </label>
+                  <textarea
+                    className="w-full bg-[#0f0f1a] text-slate-300 text-xs rounded-lg p-2.5 border border-[#2a2a3f] focus:border-indigo-500 outline-none resize-none leading-relaxed font-mono"
+                    rows={4}
+                    value={data.llmStructuredSchema ?? ''}
+                    onChange={(e) => updateNodeData(node.id, { llmStructuredSchema: e.target.value })}
+                    placeholder={'{\n  "type": "object",\n  "properties": { "name": { "type": "string" } }\n}'}
+                  />
+                  <p className="text-[10px] text-slate-600 mt-1">
+                    OpenAI structured output schema. Leave blank for basic JSON mode.
+                  </p>
+                </div>
               )}
             </div>
 
@@ -847,12 +886,65 @@ export function NodeInspector() {
           <TriggerInspector nodeId={node.id} data={data} />
         )}
 
+        {data.kind === 'systemprompt' && (
+          <div className="space-y-3 border border-teal-700/40 rounded-lg p-3 bg-teal-900/20">
+            <div className="flex items-center gap-2 text-xs font-semibold text-teal-300">
+              <BookMarked size={13} className="text-teal-400" />
+              System Prompt Content
+            </div>
+            <textarea
+              className="w-full bg-[#0f0f1a] text-slate-300 text-xs rounded-lg p-2.5 border border-[#2a2a3f] focus:border-teal-500 outline-none resize-none leading-relaxed font-mono"
+              rows={8}
+              value={data.systemPromptContent ?? ''}
+              onChange={(e) => updateNodeData(node.id, { systemPromptContent: e.target.value })}
+              placeholder="You are a helpful assistant…"
+            />
+            <p className="text-[10px] text-slate-500">
+              Connect this node's output to an LLM or Judge node to inject this as the system prompt.
+            </p>
+          </div>
+        )}
+
+        {data.kind === 'judge' && (
+          <div className="space-y-3 border border-amber-700/40 rounded-lg p-3 bg-amber-900/20">
+            <div className="flex items-center gap-2 text-xs font-semibold text-amber-300">
+              <Scale size={13} className="text-amber-400" />
+              Judge Model
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-[11px] text-slate-500 w-14 shrink-0">Provider</label>
+              <select
+                className="flex-1 bg-[#0f0f1a] text-slate-300 text-xs rounded px-2 py-1 border border-[#2a2a3f] focus:border-amber-500 outline-none"
+                value={data.llmProvider ?? 'default'}
+                onChange={(e) => updateNodeData(node.id, { llmProvider: e.target.value as NodeData['llmProvider'] })}
+              >
+                <option value="default">OpenAI / API settings</option>
+                <option value="ollama">Ollama (local)</option>
+                <option value="anthropic">Anthropic (Claude)</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-[11px] text-slate-500 w-14 shrink-0">Model</label>
+              <input
+                className="flex-1 bg-[#0f0f1a] text-slate-300 text-xs rounded px-2 py-1 border border-[#2a2a3f] focus:border-amber-500 outline-none font-mono"
+                placeholder={data.llmProvider === 'ollama' ? 'llama3.2' : data.llmProvider === 'anthropic' ? 'claude-3-5-haiku-20241022' : 'gpt-4o-mini'}
+                value={data.llmModel ?? ''}
+                onChange={(e) => updateNodeData(node.id, { llmModel: e.target.value })}
+              />
+            </div>
+            <div className="text-[10px] text-slate-500 space-y-0.5 pt-1 border-t border-amber-700/20">
+              <div><span className="text-slate-400 font-medium">Inputs:</span> <code className="text-amber-300">content</code> (thing to evaluate), <code className="text-amber-300">criteria</code> (optional)</div>
+              <div><span className="text-slate-400 font-medium">Outputs:</span> <code className="text-amber-300">score</code> (0–10), <code className="text-amber-300">verdict</code> (pass/fail/review), <code className="text-amber-300">reasoning</code></div>
+            </div>
+          </div>
+        )}
+
         {data.kind === 'workflow' && (
           <WorkflowInspector nodeId={node.id} data={data} />
         )}
 
-        {/* Code (hide for UI, MCP, State, Workflow, and Trigger nodes) */}
-        {data.kind !== 'ui' && data.kind !== 'mcp' && data.kind !== 'state' && data.kind !== 'workflow' && data.kind !== 'trigger' && (
+        {/* Code (hide for UI, MCP, State, Workflow, Trigger, SystemPrompt, and Judge nodes) */}
+        {data.kind !== 'ui' && data.kind !== 'mcp' && data.kind !== 'state' && data.kind !== 'workflow' && data.kind !== 'trigger' && data.kind !== 'systemprompt' && data.kind !== 'judge' && (
         <div>
           <button
             className="flex items-center justify-between w-full text-[11px] uppercase tracking-widest text-slate-500 mb-1.5"
@@ -884,8 +976,8 @@ export function NodeInspector() {
         </div>
         )}
 
-        {/* Prompt / Regenerate (hide for UI, MCP, State, Workflow, and Trigger nodes) */}
-        {data.kind !== 'ui' && data.kind !== 'mcp' && data.kind !== 'state' && data.kind !== 'workflow' && data.kind !== 'trigger' && (
+        {/* Prompt / Regenerate (hide for UI, MCP, State, Workflow, Trigger, SystemPrompt, and Judge nodes) */}
+        {data.kind !== 'ui' && data.kind !== 'mcp' && data.kind !== 'state' && data.kind !== 'workflow' && data.kind !== 'trigger' && data.kind !== 'systemprompt' && data.kind !== 'judge' && (
           <div>
             <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-slate-500 mb-1.5">
               <Zap size={11} />

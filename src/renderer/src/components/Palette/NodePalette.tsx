@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { Download, Cpu, Terminal, GitBranch, Upload, Layers, BookOpen, MessageSquare, FileText, ListChecks, Plug, StickyNote, Database, RefreshCw, ChevronDown, ChevronRight, Clock } from 'lucide-react'
+import { Download, Cpu, Terminal, GitBranch, Upload, Layers, BookOpen, MessageSquare, FileText, ListChecks, Plug, StickyNote, Database, RefreshCw, ChevronDown, ChevronRight, Clock, Scale } from 'lucide-react'
 import type { NodeKind, NodeData, FlowProject } from '../../types'
 import { useFlowStore } from '../../store/flowStore'
 
@@ -86,6 +86,22 @@ const paletteItems: PaletteItem[] = [
     desc: 'Run this workflow automatically on a cron schedule',
     color: 'text-slate-400',
     bg: 'bg-slate-900/30 border-slate-700/50 hover:border-slate-500',
+  },
+  {
+    kind: 'systemprompt',
+    icon: <BookOpen size={18} />,
+    label: 'System Prompt',
+    desc: 'Provides a system prompt to a connected LLM or Judge node',
+    color: 'text-teal-400',
+    bg: 'bg-teal-900/30 border-teal-700/50 hover:border-teal-500',
+  },
+  {
+    kind: 'judge',
+    icon: <Scale size={18} />,
+    label: 'LLM Judge',
+    desc: 'Evaluate content quality using an LLM — outputs score, verdict, reasoning',
+    color: 'text-amber-400',
+    bg: 'bg-amber-900/30 border-amber-700/50 hover:border-amber-500',
   },
 ]
 

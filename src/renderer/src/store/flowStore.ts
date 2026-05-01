@@ -161,6 +161,30 @@ const defaultNodeData = (kind: NodeKind): NodeData => {
       cronExpr: '0 9 * * *',
       triggerEnabled: false,
     },
+    systemprompt: {
+      label: 'System Prompt',
+      description: 'Provides a system prompt to a connected LLM or Judge node.',
+      inputs: [],
+      outputs: [{ name: 'system_prompt', type: 'string', description: 'The system prompt text' }],
+      code: '',
+      systemPromptContent: 'You are a helpful assistant.',
+    },
+    judge: {
+      label: 'LLM Judge',
+      description: 'Evaluates content using an LLM. Outputs score, verdict, and reasoning.',
+      inputs: [
+        { name: 'content', type: 'any', description: 'Content to evaluate' },
+        { name: 'criteria', type: 'string', description: 'Evaluation criteria (optional)' },
+      ],
+      outputs: [
+        { name: 'score', type: 'number', description: 'Score 0–10' },
+        { name: 'verdict', type: 'string', description: 'pass / fail / review' },
+        { name: 'reasoning', type: 'string', description: 'Explanation' },
+      ],
+      code: '',
+      llmProvider: 'default',
+      llmModel: '',
+    },
   }
   return {
     kind,

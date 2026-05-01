@@ -2,7 +2,7 @@ import React, { memo, useState } from 'react'
 import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 import type { NodeData } from '../../../types'
-import { Download, Upload, Cpu, GitBranch, Terminal, ArrowRightLeft, MessageSquare, FileText, ListChecks, Plug, StickyNote, Database, Layers, Clock } from 'lucide-react'
+import { Download, Upload, Cpu, GitBranch, Terminal, ArrowRightLeft, MessageSquare, FileText, ListChecks, Plug, StickyNote, Database, Layers, Clock, BookOpen, Scale } from 'lucide-react'
 import { useFlowStore } from '../../../store/flowStore'
 
 // ─── Shared node styles ───────────────────────────────────────────────────────
@@ -55,6 +55,18 @@ const kindMeta: Record<string, { bg: string; border: string; icon: React.ReactNo
     border: 'border-slate-400',
     icon: <Clock size={14} />,
     label: 'TRIGGER',
+  },
+  systemprompt: {
+    bg: 'bg-teal-900/80',
+    border: 'border-teal-500',
+    icon: <BookOpen size={14} />,
+    label: 'SYSTEM PROMPT',
+  },
+  judge: {
+    bg: 'bg-amber-900/80',
+    border: 'border-amber-400',
+    icon: <Scale size={14} />,
+    label: 'JUDGE',
   },
 }
 
@@ -392,6 +404,7 @@ export const DecisionNode = memo((props: NodeProps<NodeData>) => <BaseNode {...p
 export const OutputNode = memo((props: NodeProps<NodeData>) => <BaseNode {...props} />)
 export const WorkflowNode = memo((props: NodeProps<NodeData>) => <BaseNode {...props} />)
 export const TriggerNode = memo((props: NodeProps<NodeData>) => <BaseNode {...props} />)
+export const JudgeNode = memo((props: NodeProps<NodeData>) => <BaseNode {...props} />)
 
 InputNode.displayName = 'InputNode'
 FunctionNode.displayName = 'FunctionNode'
@@ -399,6 +412,51 @@ DecisionNode.displayName = 'DecisionNode'
 OutputNode.displayName = 'OutputNode'
 WorkflowNode.displayName = 'WorkflowNode'
 TriggerNode.displayName = 'TriggerNode'
+JudgeNode.displayName = 'JudgeNode'
+
+// ─── System Prompt node ───────────────────────────────────────────────────────
+// Source-only node that injects a system prompt into connected LLM/Judge nodes
+
+export const SystemPromptNode = memo(({ id, data, selected }: NodeProps<NodeData>) => {
+  const { selectNode } = useFlowStore()
+  return (
+    <div
+      onClick={() => selectNode(id)}
+      className={`
+        min-w-[160px] max-w-[200px] rounded-xl border-2 border-teal-500 bg-teal-900/80
+        shadow-lg cursor-pointer transition-all duration-150
+        ${selected ? 'ring-2 ring-teal-400 ring-offset-1 ring-offset-transparent' : ''}
+        ${data.hasError ? 'border-red-400 ring-2 ring-red-400' : ''}
+      `}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-teal-500 border-opacity-40">
+        <span className="text-teal-300 opacity-80"><BookOpen size={14} /></span>
+        <span className="text-[10px] font-bold text-teal-400 tracking-widest">SYSTEM PROMPT</span>
+      </div>
+
+      {/* Body */}
+      <div className="px-3 py-2">
+        <div className="text-sm font-semibold text-white leading-tight">{data.label}</div>
+        <div className="text-[10px] text-teal-300/70 mt-0.5 line-clamp-2 italic">
+          {data.systemPromptContent ? data.systemPromptContent.slice(0, 60) + (data.systemPromptContent.length > 60 ? '…' : '') : 'No content set'}
+        </div>
+      </div>
+
+      {/* Output handle */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="system_prompt"
+        style={{ top: '50%' }}
+        className="!bg-teal-400 !border-teal-700 !w-3 !h-3"
+        title="system_prompt: connect to LLM or Judge node"
+      />
+    </div>
+  )
+})
+
+SystemPromptNode.displayName = 'SystemPromptNode'
 
 // ─── State Variable node ──────────────────────────────────────────────────────
 
