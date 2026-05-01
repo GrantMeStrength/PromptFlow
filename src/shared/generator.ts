@@ -45,7 +45,7 @@ function topoSort(nodes: FlowNode[], edges: FlowEdge[]): FlowNode[] {
 
 function buildEdgeMaps(nodes: FlowNode[], edges: FlowEdge[], execIds: Set<string>) {
   const nodeById = new Map(nodes.map(n => [n.id, n]))
-  const inputSources = new Map<string, Map<string, { srcId: string; handle: string; explicit: boolean }>>()
+  const inputSources = new Map<string, Map<string, { srcId: string; handle: string; explicit: boolean; fromDecision: boolean }>>()
   const mcpSources = new Map<string, NodeData[]>()
   const systemPromptSources = new Map<string, string>() // targetNodeId → sourceNodeId
 
@@ -77,6 +77,7 @@ function buildEdgeMaps(nodes: FlowNode[], edges: FlowEdge[], execIds: Set<string
       // multiple implicit edges (multi-input nodes). Single-input nodes keep 'value' for
       // backward compatibility so inputs.value always holds the upstream result.
       const isMultiImplicit = e.targetHandle == null && (implicitEdgeCounts.get(e.target) ?? 0) > 1
+      const fromDecision = srcNode.data.kind === 'decision' && e.sourceHandle != null
       inputSources.get(e.target)!.set(
         e.targetHandle ?? (isMultiImplicit ? e.source : 'value'),
         {
@@ -85,6 +86,10 @@ function buildEdgeMaps(nodes: FlowNode[], edges: FlowEdge[], execIds: Set<string
           // explicit = edge had a real sourceHandle (not defaulted), meaning the source
           // node returns an object and we should use ONLY that key (e.g. Decision branches).
           explicit: e.sourceHandle != null,
+          // fromDecision = this edge carries one branch of a decision node's output.
+          // When the branch is not taken, the decision returns null for that key, and
+          // this node should be skipped rather than executing with null input.
+          fromDecision,
         }
       )
     }
@@ -126,7 +131,10 @@ function emitNodeBodyLines(
     try { defaultVal = JSON.parse(node.data.stateDefault ?? 'null') } catch { defaultVal = node.data.stateDefault ?? null }
     const defaultExpr = JSON.stringify(defaultVal)
     if (node.data.stateMode === 'write') {
-      lines.push(`${ind}const _val = inputs.value !== undefined ? inputs.value : ${defaultExpr}`)
+      // Normalize the incoming value: extract primary scalar from upstream object shapes
+      // (e.g. UI node returns { value: 'text' }, LLM returns { response: 'text' })
+      lines.push(`${ind}const _rawVal = inputs.value`)
+      lines.push(`${ind}const _val = (_rawVal !== undefined && typeof _rawVal !== 'object') ? _rawVal : (_rawVal && typeof _rawVal === 'object') ? (_rawVal.response ?? _rawVal.result ?? _rawVal.content ?? _rawVal.value ?? _rawVal.text ?? _rawVal) : ${defaultExpr}`)
       lines.push(`${ind}await setState(\`${key}\`, _val)`)
       lines.push(`${ind}return { value: _val }`)
     } else {
@@ -270,7 +278,9 @@ function emitNodeBodyLines(
       // _llmResolve(k): resolves template variable k from inputs.
       // Handles source-ID-keyed inputs (e.g. inputs['node1'] = {value:'cats'}) by
       // extracting the primary string from an object when inputs[k] is itself an object.
-      lines.push(`${ind}const _llmResolve = (k) => { const _d = inputs[k]; if (_d != null && typeof _d !== 'object') return String(_d); if (_d != null && typeof _d === 'object') { const _p = _d.response ?? _d.result ?? _d.content ?? _d.value ?? _d.text; if (_p != null && typeof _p !== 'object') return String(_p); } for (const _iv of Object.values(inputs)) { if (_iv && typeof _iv === 'object' && _iv[k] != null && typeof _iv[k] !== 'object') return String(_iv[k]); } for (const _iv of Object.values(inputs)) { if (_iv && typeof _iv === 'object' && _iv['value'] != null && typeof _iv['value'] !== 'object') return String(_iv['value']); } for (const _iv of Object.values(inputs)) { if (_iv && typeof _iv === 'object') { const _s = Object.values(_iv).find(v => typeof v === 'string'); if (_s != null) return String(_s); } } const _strs = Object.values(inputs).filter(v => typeof v === 'string'); return _strs.length > 0 ? _strs[0] : ''; }`)
+      // _llmResolve(k): resolves template variable k to a string for prompt substitution.
+      // Arrays and structured objects are JSON-serialised rather than silently discarded.
+      lines.push(`${ind}const _llmResolve = (k) => { const _d = inputs[k]; if (_d != null && typeof _d !== 'object') return String(_d); if (Array.isArray(_d)) return JSON.stringify(_d); if (_d != null && typeof _d === 'object') { const _p = _d.response ?? _d.result ?? _d.content ?? _d.value ?? _d.text; if (_p != null && typeof _p !== 'object') return String(_p); if (Array.isArray(_p)) return JSON.stringify(_p); } for (const _iv of Object.values(inputs)) { if (_iv && typeof _iv === 'object' && _iv[k] != null) { if (typeof _iv[k] !== 'object') return String(_iv[k]); if (Array.isArray(_iv[k])) return JSON.stringify(_iv[k]); } } for (const _iv of Object.values(inputs)) { if (_iv && typeof _iv === 'object' && _iv['value'] != null && typeof _iv['value'] !== 'object') return String(_iv['value']); } for (const _iv of Object.values(inputs)) { if (_iv && typeof _iv === 'object') { const _s = Object.values(_iv).find(v => typeof v === 'string'); if (_s != null) return String(_s); } } const _strs = Object.values(inputs).filter(v => typeof v === 'string'); return _strs.length > 0 ? _strs[0] : ''; }`)
       for (const v of templateVars) {
         lines.push(`${ind}_llmPrompt = _llmPrompt.replace('{{${v}}}', _llmResolve('${v}'))`)
       }
@@ -292,14 +302,14 @@ function emitNodeBodyLines(
   // Wrap user code in an inner async IIFE so BOTH coding patterns work:
   //   • return { result: value }  — explicit return, captured as __output
   //   • result = value            — assignment, returned via fallback
-  const nodeCode = node.data.code || 'return inputs'
+  const nodeCode = node.data.code || (node.data.kind === 'output' ? 'return inputs.value' : 'return inputs')
   lines.push(`${ind}let result`)
   lines.push(`${ind}const __rawInputs__ = inputs`)
   lines.push(`${ind}const __output = await (async () => {`)
-  if (node.data.kind === 'function') {
+  if (node.data.kind === 'function' || node.data.kind === 'decision') {
     // Resolve the primary string value from any upstream shape.
     // Falls back to searching all rawInputs values (for source-ID-keyed multi-input nodes).
-    lines.push(`${ind}  const __v = __rawInputs__.value?.response ?? __rawInputs__.value?.result ?? __rawInputs__.value?.content ?? __rawInputs__.value?.value ?? (typeof __rawInputs__.value === 'string' ? __rawInputs__.value : null) ?? Object.values(__rawInputs__).map(_rv => typeof _rv === 'string' ? _rv : (_rv && typeof _rv === 'object' ? (_rv.response ?? _rv.result ?? _rv.content ?? _rv.value ?? _rv.text) : null)).find(Boolean) ?? ''`)    // Shadow 'inputs' so inputs.value is always the resolved string, and all common
+    lines.push(`${ind}  const __v = __rawInputs__.value?.response ?? __rawInputs__.value?.result ?? __rawInputs__.value?.content ?? __rawInputs__.value?.value ?? (typeof __rawInputs__.value === 'string' ? __rawInputs__.value : null) ?? Object.values(__rawInputs__).map(_rv => typeof _rv === 'string' ? _rv : (_rv && typeof _rv === 'object' ? (_rv.response ?? _rv.result ?? _rv.content ?? _rv.value ?? _rv.text) : null)).find(Boolean) ?? ''`)
     // alias keys (text, content, data, etc.) point to the same resolved value by default.
     // __rawInputs__ spread last so actual upstream keys (topic, options, etc.) always win.
     // NOTE: we do NOT auto-destructure these names — user code may declare their own
@@ -527,12 +537,22 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
     } else {
       // Build the inputs object for this node
       const inputParts: string[] = []
+      // Decision branch checks: skip this node if any of its decision-branch inputs are null
+      // (null = that branch was not taken). Use direct access without object fallback for these.
+      const decisionSkipChecks: string[] = []
       if (node.data.kind === 'input') {
         inputParts.push(`...initialInput`)
       } else if (sources) {
-        for (const [targetHandle, { srcId, handle }] of sources) {
+        for (const [targetHandle, { srcId, handle, fromDecision }] of sources) {
           const srcFn = `results[${JSON.stringify(srcId)}]`
-          inputParts.push(`"${targetHandle}": ${srcFn}?.["${handle}"] ?? ${srcFn}`)
+          if (fromDecision) {
+            // Decision branches: use exact handle, no whole-object fallback
+            inputParts.push(`"${targetHandle}": ${srcFn}?.["${handle}"]`)
+            // If the branch value is null (not taken), skip execution
+            decisionSkipChecks.push(`${srcFn}?.["${handle}"] === null`)
+          } else {
+            inputParts.push(`"${targetHandle}": ${srcFn}?.["${handle}"] ?? ${srcFn}`)
+          }
         }
       }
       const spSrcId = systemPromptSources.get(node.id)
@@ -542,11 +562,22 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
       const inputsExpr = `{ ${inputParts.join(', ')} }`
       // Collect source node IDs to check for upstream errors
       const upstreamIds = sources ? [...sources.values()].map(s => JSON.stringify(s.srcId)) : []
-      lines.push(`  try {`)
+      // Combined skip condition: upstream error OR decision branch not taken
+      const skipConditions: string[] = []
       if (upstreamIds.length > 0) {
-        lines.push(`    if ([${upstreamIds.join(', ')}].some(id => results[id]?.__error)) {`)
-        lines.push(`      results[${nodeIdJson}] = { __error: true, message: 'Skipped: upstream node failed' }`)
-        lines.push(`      __trace__.push({ id: ${nodeIdJson}, label: ${nodeLabelJson}, kind: ${nodeKindJson}, error: 'Skipped: upstream node failed', output: null })`)
+        skipConditions.push(`[${upstreamIds.join(', ')}].some(id => results[id]?.__error)`)
+      }
+      if (decisionSkipChecks.length > 0) {
+        skipConditions.push(decisionSkipChecks.join(' || '))
+      }
+      lines.push(`  try {`)
+      if (skipConditions.length > 0) {
+        const skipMsg = decisionSkipChecks.length > 0
+          ? `([${upstreamIds.join(', ')}].some(id => results[id]?.__error) ? 'Skipped: upstream node failed' : 'Skipped: decision branch not taken')`
+          : `'Skipped: upstream node failed'`
+        lines.push(`    if (${skipConditions.join(' || ')}) {`)
+        lines.push(`      results[${nodeIdJson}] = { __error: true, message: ${skipMsg} }`)
+        lines.push(`      __trace__.push({ id: ${nodeIdJson}, label: ${nodeLabelJson}, kind: ${nodeKindJson}, error: ${skipMsg}, output: null })`)
         lines.push(`    } else {`)
         lines.push(`      if (typeof __notifyNode__ === 'function') await __notifyNode__(${nodeIdJson})`)
         lines.push(`      results[${nodeIdJson}] = await ${fnName}(${inputsExpr})`)

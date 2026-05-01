@@ -331,6 +331,150 @@ return { __html: '<div>' + bars + '</div>' }`,
       return true
     },
   },
+
+  {
+    name: 'Decision: true branch executes, false branch is skipped',
+    nodes: [
+      { id: 'ui1', type: 'ui', position: { x: 0, y: 0 }, data: { label: 'Input', kind: 'ui', uiKind: 'text' } },
+      { id: 'dec', type: 'decision', position: { x: 200, y: 0 }, data: {
+        label: 'Check', kind: 'decision', branches: ['true', 'false'],
+        code: `const condition = inputs.value != null && inputs.value !== '' && inputs.value !== false\nreturn condition ? { true: inputs.value, false: null } : { true: null, false: inputs.value }`,
+      } },
+      // true branch: function that transforms value
+      { id: 'trueFn', type: 'function', position: { x: 400, y: 0 }, data: { label: 'True Path', kind: 'function', code: 'return { result: "true-path:" + (inputs.value ?? "") }' } },
+      // false branch: function that should NOT run when condition is true
+      { id: 'falseFn', type: 'function', position: { x: 400, y: 150 }, data: { label: 'False Path', kind: 'function', code: 'return { result: "false-path" }' } },
+      { id: 'out', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Out', kind: 'output' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'ui1', target: 'dec' },
+      { id: 'e2', source: 'dec', target: 'trueFn', sourceHandle: 'true' },
+      { id: 'e3', source: 'dec', target: 'falseFn', sourceHandle: 'false' },
+      { id: 'e4', source: 'trueFn', target: 'out' },
+    ],
+    uiInputs: { ui1: { value: 'hello' } },
+    expect: (result, trace) => {
+      // True branch should succeed
+      const trueEntry = trace.find(t => t.id === 'trueFn')
+      if (trueEntry?.error) throw new Error(`True branch should succeed, got error: ${trueEntry.error}`)
+      if (!trueEntry) throw new Error('True branch missing from trace')
+      // False branch should be skipped (decision branch not taken)
+      const falseEntry = trace.find(t => t.id === 'falseFn')
+      if (!falseEntry?.error?.includes('Skipped')) {
+        throw new Error(`False branch should be skipped, got: ${JSON.stringify(falseEntry)}`)
+      }
+      return true
+    },
+  },
+
+  {
+    name: 'Decision: false branch executes when condition is false',
+    nodes: [
+      { id: 'ui1', type: 'ui', position: { x: 0, y: 0 }, data: { label: 'Input', kind: 'ui', uiKind: 'text' } },
+      { id: 'dec', type: 'decision', position: { x: 200, y: 0 }, data: {
+        label: 'Check', kind: 'decision', branches: ['true', 'false'],
+        code: `const condition = inputs.value != null && inputs.value !== '' && inputs.value !== false\nreturn condition ? { true: inputs.value, false: null } : { true: null, false: inputs.value }`,
+      } },
+      { id: 'trueFn', type: 'function', position: { x: 400, y: 0 }, data: { label: 'True Path', kind: 'function', code: 'return { result: "true-path" }' } },
+      { id: 'falseFn', type: 'function', position: { x: 400, y: 150 }, data: { label: 'False Path', kind: 'function', code: 'return { result: "false-path" }' } },
+      { id: 'out', type: 'output', position: { x: 600, y: 150 }, data: { label: 'Out', kind: 'output' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'ui1', target: 'dec' },
+      { id: 'e2', source: 'dec', target: 'trueFn', sourceHandle: 'true' },
+      { id: 'e3', source: 'dec', target: 'falseFn', sourceHandle: 'false' },
+      { id: 'e4', source: 'falseFn', target: 'out' },
+    ],
+    uiInputs: { ui1: { value: '' } },  // empty = condition false
+    expect: (result, trace) => {
+      // True branch should be skipped
+      const trueEntry = trace.find(t => t.id === 'trueFn')
+      if (!trueEntry?.error?.includes('Skipped')) {
+        throw new Error(`True branch should be skipped, got: ${JSON.stringify(trueEntry)}`)
+      }
+      // False branch should execute
+      const falseEntry = trace.find(t => t.id === 'falseFn')
+      if (falseEntry?.error) throw new Error(`False branch should succeed, got error: ${falseEntry.error}`)
+      if (!falseEntry) throw new Error('False branch missing from trace')
+      return true
+    },
+  },
+
+  {
+    name: 'Chunker: paragraph split produces chunks array',
+    nodes: [
+      { id: 'ui1', type: 'ui', position: { x: 0, y: 0 }, data: { label: 'Doc', kind: 'ui', uiKind: 'text' } },
+      { id: 'chunk', type: 'chunker', position: { x: 200, y: 0 }, data: { label: 'Split', kind: 'chunker', chunkerStrategy: 'paragraph', chunkerSize: 30, chunkerOverlap: 0 } },
+      { id: 'out', type: 'output', position: { x: 400, y: 0 }, data: { label: 'Out', kind: 'output' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'ui1', target: 'chunk' },
+      { id: 'e2', source: 'chunk', target: 'out' },
+    ],
+    // Each paragraph >30 chars, so they must each be their own chunk
+    uiInputs: { ui1: { value: 'First paragraph text here.\n\nSecond paragraph text here.\n\nThird paragraph text here.' } },
+    expect: (result) => {
+      if (result?.__error) throw new Error(`Pipeline errored: ${result.message}`)
+      const chunks = result?.chunks ?? result?.value?.chunks
+      if (!Array.isArray(chunks) || chunks.length < 2) throw new Error(`Expected chunks array with ≥2 items, got: ${JSON.stringify(result)}`)
+      return true
+    },
+  },
+
+  {
+    name: 'Chunker → LLM: {{chunks}} template var resolves to JSON array',
+    nodes: [
+      { id: 'ui1', type: 'ui', position: { x: 0, y: 0 }, data: { label: 'Doc', kind: 'ui', uiKind: 'text' } },
+      { id: 'chunk', type: 'chunker', position: { x: 200, y: 0 }, data: { label: 'Split', kind: 'chunker', chunkerStrategy: 'paragraph', chunkerSize: 200, chunkerOverlap: 0 } },
+      { id: 'llm1', type: 'llm', position: { x: 400, y: 0 }, data: { label: 'Summarise', kind: 'llm', llmPromptTemplate: 'Summarise these chunks: CHUNKS=={{chunks}}==' } },
+      { id: 'out', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Out', kind: 'output' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'ui1', target: 'chunk' },
+      { id: 'e2', source: 'chunk', target: 'llm1' },
+      { id: 'e3', source: 'llm1', target: 'out' },
+    ],
+    uiInputs: { ui1: { value: 'First paragraph.\n\nSecond paragraph.\n\nThird paragraph.' } },
+    // Echo the prompt back to verify {{chunks}} was resolved to a JSON array (not the text field)
+    mockLLM: async (_model, prompt) => prompt,
+    expect: (result) => {
+      if (result?.__error) throw new Error(`Pipeline errored: ${result.message}`)
+      const response = result?.response ?? result?.value?.response ?? JSON.stringify(result)
+      // Should contain JSON array brackets from JSON.stringify(chunks)
+      if (!response.includes('CHUNKS==[')) throw new Error(`Expected JSON array in prompt for {{chunks}}, got: ${response.slice(0, 200)}`)
+      return true
+    },
+  },
+
+  {
+    name: 'State: write then read roundtrip',
+    nodes: [
+      { id: 'ui1', type: 'ui', position: { x: 0, y: 0 }, data: { label: 'Input', kind: 'ui', uiKind: 'text' } },
+      { id: 'sw', type: 'state', position: { x: 200, y: 0 }, data: { label: 'Write', kind: 'state', stateMode: 'write', stateKey: 'myKey', stateDefault: 'null' } },
+      { id: 'sr', type: 'state', position: { x: 400, y: 0 }, data: { label: 'Read', kind: 'state', stateMode: 'read', stateKey: 'myKey', stateDefault: '"default"' } },
+      { id: 'out', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Out', kind: 'output' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'ui1', target: 'sw' },
+      { id: 'e2', source: 'sw', target: 'sr' },
+      { id: 'e3', source: 'sr', target: 'out' },
+    ],
+    uiInputs: { ui1: { value: 'stored-value' } },
+    // setState/getState need to work together
+    buildSandbox: (uiInputs) => {
+      const store = {}
+      const s = buildSandbox(uiInputs)
+      s.setState = async (k, v) => { store[k] = v }
+      s.getState = async (k, def) => (k in store ? store[k] : def)
+      return s
+    },
+    expect: (result) => {
+      if (result?.__error) throw new Error(`Pipeline errored: ${result.message}`)
+      const val = result?.value ?? result
+      if (val !== 'stored-value') throw new Error(`Expected 'stored-value', got: ${JSON.stringify(val)}`)
+      return true
+    },
+  },
 ]
 // ─── Runner ───────────────────────────────────────────────────────────────────
 
@@ -347,7 +491,7 @@ console.log('\n\x1b[1mPromptFlow Pipeline Tests\x1b[0m\n')
 for (const test of TESTS) {
   try {
     const code = generateCode(test.nodes, test.edges)
-    const sandbox = buildSandbox(test.uiInputs)
+    const sandbox = test.buildSandbox ? test.buildSandbox(test.uiInputs) : buildSandbox(test.uiInputs)
     if (test.mockLLM) {
       sandbox.callLLM = test.mockLLM
       sandbox.callLLMWithTools = test.mockLLM
