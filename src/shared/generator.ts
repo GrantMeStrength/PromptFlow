@@ -176,13 +176,14 @@ function emitNodeBodyLines(
 
     lines.push(`${ind}const judgeModel = ${JSON.stringify(modelStr)}`)
     if (spSrcId) {
-      // System prompt is injected via inputs.__systemPrompt__ from the orchestrator
       lines.push(`${ind}const judgeSystemPrompt = inputs.__systemPrompt__ ?? "You are an impartial AI evaluator. Evaluate the provided content against the given criteria and respond ONLY with a JSON object containing: score (0-10 integer), verdict ('pass'|'fail'|'review'), reasoning (string)."`)
     } else {
       lines.push(`${ind}const judgeSystemPrompt = "You are an impartial AI evaluator. Evaluate the provided content against the given criteria and respond ONLY with a JSON object containing: score (0-10 integer), verdict ('pass'|'fail'|'review'), reasoning (string)."`)
     }
-    lines.push(`${ind}const judgeContent = inputs.content ?? inputs.value ?? ''`)
-    lines.push(`${ind}const judgeCriteria = inputs.criteria ?? ''`)
+    // Resolve any input to a plain string — handles objects like { response: "..." } from LLM nodes
+    lines.push(`${ind}const _judgeResolve = (v) => { if (v == null) return ''; if (typeof v === 'string') return v; if (typeof v === 'object') return v.response ?? v.content ?? v.value ?? v.result ?? v.text ?? JSON.stringify(v); return String(v) }`)
+    lines.push(`${ind}const judgeContent = _judgeResolve(inputs.content ?? inputs.value ?? inputs.text ?? inputs.response)`)
+    lines.push(`${ind}const judgeCriteria = _judgeResolve(inputs.criteria ?? inputs.requirements ?? inputs.jobRequirements ?? '')`)
     lines.push(`${ind}const judgePrompt = judgeCriteria ? \`Evaluate this content:\\n\\n\${judgeContent}\\n\\nCriteria: \${judgeCriteria}\` : \`Evaluate this content:\\n\\n\${judgeContent}\``)
     lines.push(`${ind}const judgeRaw = await callLLM(judgeModel, judgePrompt, judgeSystemPrompt, { type: 'json_object' })`)
     lines.push(`${ind}let judgeResult`)
@@ -402,6 +403,7 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
 
   // Build node-by-id map (includes mcp nodes for config lookup)
   const execIds = new Set(sorted.map(n => n.id))
+  const nodeById = new Map(nodes.map(n => [n.id, n]))
   const { inputSources, mcpSources, systemPromptSources } = buildEdgeMaps(nodes, edges, execIds)
 
   const lines: string[] = []
@@ -454,7 +456,29 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
 
     if (node.data.kind === 'ui') {
       // UI nodes get their value from __uiInputs__ — no edge wiring needed
+      lines.push(`  if (typeof __notifyNode__ === 'function') await __notifyNode__(${JSON.stringify(node.id)})`)
       lines.push(`  results["${node.id}"] = await ${fnName}({})`)
+    } else if (node.data.kind === 'judge') {
+      // Judge nodes: wire content (from LLM/function/chunker) and criteria (from UI/input) by source kind
+      const judgeEdges = edges.filter(e => e.target === node.id)
+      const inputParts: string[] = []
+      for (const e of judgeEdges) {
+        const srcNode = nodeById.get(e.source)
+        if (!srcNode) continue
+        const srcKind = srcNode.data.kind
+        const srcFn = `results["${e.source}"]`
+        // Resolve to a usable value — prefer response/content/value fields over raw object
+        const resolved = `${srcFn}?.response ?? ${srcFn}?.content ?? ${srcFn}?.value ?? ${srcFn}?.result ?? ${srcFn}`
+        if (srcKind === 'ui' || srcKind === 'input') {
+          inputParts.push(`"criteria": ${resolved}`)
+        } else {
+          inputParts.push(`"content": ${resolved}`)
+        }
+      }
+      const spSrcId = systemPromptSources.get(node.id)
+      if (spSrcId) inputParts.push(`"__systemPrompt__": results[${JSON.stringify(spSrcId)}]?.system_prompt`)
+      lines.push(`  if (typeof __notifyNode__ === 'function') await __notifyNode__(${JSON.stringify(node.id)})`)
+      lines.push(`  results["${node.id}"] = await ${fnName}({ ${inputParts.join(', ')} })`)
     } else {
       // Build the inputs object for this node
       const inputParts: string[] = []
@@ -475,6 +499,7 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
         inputParts.push(`"__systemPrompt__": results[${JSON.stringify(spSrcId)}]?.system_prompt`)
       }
       const inputsExpr = `{ ${inputParts.join(', ')} }`
+      lines.push(`  if (typeof __notifyNode__ === 'function') await __notifyNode__(${JSON.stringify(node.id)})`)
       lines.push(`  results["${node.id}"] = await ${fnName}(${inputsExpr})`)
     }
     if (node.data.kind !== 'note') {
@@ -485,6 +510,7 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
   // Return last node's output alongside the trace
   const lastNode = sorted[sorted.length - 1]
   lines.push(``)
+  lines.push(`  if (typeof __notifyNode__ === 'function') await __notifyNode__(null)`)
   lines.push(`  return { __result: results["${lastNode.id}"], __trace: __trace__ }`)
   lines.push(`}`)
   lines.push(``)

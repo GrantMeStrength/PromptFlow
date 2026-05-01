@@ -566,6 +566,10 @@ ipcMain.handle('run-code', async (_event, code: string, input: unknown, uiInputs
       // Inject state variable helpers so State nodes can persist data between runs
       getState: (key: string, defaultValue: unknown = null) => readStateVar(key, defaultValue),
       setState: (key: string, value: unknown) => writeStateVar(key, value),
+      // Notify renderer which node is currently executing (for visual highlight)
+      __notifyNode__: (nodeId: string | null) => {
+        _event.sender.send('node-running', nodeId)
+      },
       result: undefined,
     }
     const context = vm.createContext(sandbox)

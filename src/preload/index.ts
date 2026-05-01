@@ -37,6 +37,11 @@ const api: ElectronAPI = {
     ipcRenderer.on('scheduler-run', handler)
     return () => ipcRenderer.off('scheduler-run', handler)
   },
+  onNodeRunning: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, nodeId: string | null) => callback(nodeId)
+    ipcRenderer.on('node-running', handler)
+    return () => ipcRenderer.off('node-running', handler)
+  },
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

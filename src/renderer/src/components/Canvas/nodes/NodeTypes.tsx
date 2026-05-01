@@ -79,8 +79,9 @@ const kindMeta: Record<string, { bg: string; border: string; icon: React.ReactNo
 interface BaseNodeProps extends NodeProps<NodeData> {}
 
 const BaseNode = memo(({ id, data, selected }: BaseNodeProps) => {
-  const { selectNode } = useFlowStore()
+  const { selectNode, runningNodeId } = useFlowStore()
   const meta = kindMeta[data.kind] ?? kindMeta.function
+  const isRunning = runningNodeId === id
 
   return (
     <div
@@ -90,6 +91,7 @@ const BaseNode = memo(({ id, data, selected }: BaseNodeProps) => {
         shadow-lg cursor-pointer transition-all duration-150
         ${selected ? 'ring-2 ring-indigo-400 ring-offset-1 ring-offset-transparent' : ''}
         ${data.hasError ? 'border-red-400 ring-2 ring-red-400' : ''}
+        ${isRunning ? 'ring-2 ring-yellow-400 ring-offset-1 ring-offset-transparent shadow-yellow-400/40 shadow-xl' : ''}
       `}
     >
       {/* Input handles */}
@@ -109,6 +111,11 @@ const BaseNode = memo(({ id, data, selected }: BaseNodeProps) => {
       <div className={`flex items-center gap-1.5 px-3 py-2 border-b ${meta.border} border-opacity-40`}>
         <span className="text-slate-300 opacity-70">{meta.icon}</span>
         <span className="text-[10px] font-bold text-slate-400 tracking-widest">{meta.label}</span>
+        {isRunning && (
+          <span className="ml-auto flex items-center">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+          </span>
+        )}
       </div>
 
       {/* Body */}

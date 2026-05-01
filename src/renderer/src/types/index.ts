@@ -179,6 +179,7 @@ export interface ElectronAPI {
   getScheduleStatus: () => Promise<ScheduleStatus[]>
   notifyScheduler: () => Promise<void>
   onSchedulerRun: (callback: (entry: ScheduleRunEntry) => void) => () => void
+  onNodeRunning: (callback: (nodeId: string | null) => void) => () => void
 }
 
 declare global {

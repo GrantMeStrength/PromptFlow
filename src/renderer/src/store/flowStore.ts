@@ -24,7 +24,8 @@ interface FlowState {
   pendingUiRun: boolean
   /** UI nodes info in the current pending run (in topo order) */
   uiNodesInfo: Array<{ nodeId: string; data: NodeData }>
-
+  /** ID of the node currently executing (for highlight), null when idle */
+  runningNodeId: string | null
   // Node / Edge mutations
   onNodesChange: (changes: NodeChange[]) => void
   onEdgesChange: (changes: EdgeChange[]) => void
@@ -237,6 +238,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   pendingPipeNodeId: null,
   pendingUiRun: false,
   uiNodesInfo: [],
+  runningNodeId: null,
 
   onNodesChange: (changes) =>
     set((s) => ({ nodes: applyNodeChanges(changes, s.nodes) as FlowNode[] })),
@@ -397,11 +399,19 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       ? `⚠ ${isolated.length} unconnected node${isolated.length !== 1 ? 's' : ''} will be skipped: ${isolated.map((n) => n.data.label).join(', ')}\n\n`
       : ''
 
-    set({ isRunning: true, runOutput: warningPrefix + '▶ Running pipeline...\n', showOutput: true })
+    set({ isRunning: true, runningNodeId: null, runOutput: warningPrefix + '▶ Running pipeline...\n', showOutput: true })
+
+    // Subscribe to node-running events for visual highlighting
+    const api = window.electronAPI
+    let unsubNodeRunning: (() => void) | undefined
+    if (api?.onNodeRunning) {
+      unsubNodeRunning = api.onNodeRunning((nodeId) => {
+        set({ runningNodeId: nodeId })
+      })
+    }
 
     try {
       const code = generateCode(nodes, edges)
-      const api = window.electronAPI
       let result: unknown
 
       if (api) {
@@ -418,6 +428,9 @@ export const useFlowStore = create<FlowState>((set, get) => ({
         result = fn({}, uiInputs, getState, setState)
         if (result instanceof Promise) result = await result
       }
+
+      unsubNodeRunning?.()
+      set({ runningNodeId: null })
 
       // Extract execution trace if the generator embedded it
       type TraceEntry = { id: string; label: string; kind: string; output: unknown }
@@ -462,8 +475,10 @@ export const useFlowStore = create<FlowState>((set, get) => ({
         }))
       }
     } catch (err) {
+      unsubNodeRunning?.()
       set((s) => ({
         isRunning: false,
+        runningNodeId: null,
         runOutput: s.runOutput + `\n❌ Error: ${(err as Error).message}`,
       }))
     }
