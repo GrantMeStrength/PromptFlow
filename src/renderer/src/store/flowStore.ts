@@ -80,7 +80,7 @@ const defaultNodeData = (kind: NodeKind): NodeData => {
       outputs: [{ name: 'response', type: 'string' }],
       llmModel: 'gpt-4o',
       llmPromptTemplate: 'Summarize the following text:\\n\\n{{text}}',
-      code: `// Calls the configured LLM (callLLM / callLLMWithTools injected by runtime)\nconst text = String(inputs.text ?? inputs.content ?? inputs.value ?? '')\nconst prompt = llmPromptTemplate ? llmPromptTemplate.replace('{{text}}', text) : text\nconst _sys = typeof llmSystemPrompt !== 'undefined' ? llmSystemPrompt : undefined\nconst _mcp = typeof mcpConfigs !== 'undefined' ? mcpConfigs : []\nconst response = _mcp.length > 0\n  ? await callLLMWithTools(llmModel || 'gpt-4o-mini', prompt, _sys, _mcp)\n  : await callLLM(llmModel || 'gpt-4o-mini', prompt, _sys)\nreturn { response }`,
+      code: '',
     },
     decision: {
       label: 'Decision',
