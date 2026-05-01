@@ -344,10 +344,15 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   markSaved: (filePath) => set({ isDirty: false, projectPath: filePath }),
 
   applyWizardGraph: (newNodes, newEdges) => {
+    // Merge LLM-generated node data with defaults so all node components render correctly
+    const enrichedNodes: FlowNode[] = newNodes.map((n) => ({
+      ...n,
+      data: { ...defaultNodeData(n.data.kind as NodeKind), ...n.data },
+    }))
     set((s) => {
       const updated = new Date().toISOString()
       return {
-        nodes: newNodes,
+        nodes: enrichedNodes,
         edges: newEdges,
         selectedNodeId: null,
         isDirty: true,
