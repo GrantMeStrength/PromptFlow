@@ -275,6 +275,11 @@ function emitNodeBodyLines(
   const nodeCode = node.data.code || 'return inputs'
   lines.push(`${ind}let result`)
   lines.push(`${ind}const __output = await (async () => {`)
+  // For function nodes, inject a safe 'value' binding so wizard-generated code
+  // can use 'value' directly without worrying about key names or nesting.
+  if (node.data.kind === 'function') {
+    lines.push(`${ind}  const value = inputs.value?.response ?? inputs.value?.result ?? inputs.value?.value ?? (typeof inputs.value === 'string' ? inputs.value : (inputs.value != null ? JSON.stringify(inputs.value) : ''))`)
+  }
   for (const codeLine of nodeCode.split('\n')) {
     lines.push(`${ind}  ${codeLine}`)
   }
