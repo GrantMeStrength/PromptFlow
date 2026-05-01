@@ -248,12 +248,15 @@ function emitNodeBodyLines(
         ? node.data.outputs[0].name
         : 'response'
       lines.push(`${ind}let _llmPrompt = llmPromptTemplate`)
+      // Helper: resolve a template variable from inputs, including when the value
+      // arrives nested inside an upstream object (e.g. inputs.value = { text: "..." })
+      lines.push(`${ind}const _llmResolve = (k) => { const _d = inputs[k]; if (_d != null) return String(_d); for (const _iv of Object.values(inputs)) { if (_iv && typeof _iv === 'object' && _iv[k] != null) return String(_iv[k]); } const _strs = Object.values(inputs).filter(v => typeof v === 'string'); return _strs.length === 1 ? _strs[0] : ''; }`)
       for (const v of templateVars) {
-        lines.push(`${ind}_llmPrompt = _llmPrompt.replace('{{${v}}}', String(inputs.${v} ?? ''))`)
+        lines.push(`${ind}_llmPrompt = _llmPrompt.replace('{{${v}}}', _llmResolve('${v}'))`)
       }
-      // Catch-all for {{text}} / {{value}} / {{content}} if not already handled
+      // Catch-all for {{text}} if not already handled by templateVars
       if (!templateVars.includes('text')) {
-        lines.push(`${ind}_llmPrompt = _llmPrompt.replace('{{text}}', String(inputs.text ?? inputs.value ?? inputs.content ?? ''))`)
+        lines.push(`${ind}_llmPrompt = _llmPrompt.replace('{{text}}', _llmResolve('text'))`)
       }
       lines.push(`${ind}const _llmSys = typeof llmSystemPrompt !== 'undefined' ? llmSystemPrompt : undefined`)
       lines.push(`${ind}const _llmMcp = typeof mcpConfigs !== 'undefined' ? mcpConfigs : []`)

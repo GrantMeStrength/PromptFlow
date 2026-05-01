@@ -82,6 +82,7 @@ NODE KINDS AND THEIR DATA FIELDS:
 
 EDGE SCHEMA:
 { "id": "e1", "source": "node-id", "target": "node-id" }
+NEVER add sourceHandle or targetHandle to edges - omit those fields entirely.
 
 LAYOUT GUIDELINES:
 - Use x: 100-1200, y: 100-600 with ~200px spacing between connected nodes
