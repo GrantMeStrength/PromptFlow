@@ -237,15 +237,28 @@ function sanitizeGraph(graph: { nodes: FlowNode[]; edges: FlowEdge[] }): {
   const fixes: string[] = []
 
   const nodes = graph.nodes.map((n) => {
-    if (n.data.kind !== 'function' || !n.data.code) return n
-    // Replace inputs.<key> where key isn't a known safe key
-    const fixed = n.data.code.replace(/\binputs\.([a-zA-Z_]\w*)/g, (_match, key) => {
-      if (SAFE_INPUT_KEYS.has(key)) return `inputs.${key}`
-      fixes.push(`"${n.data.label}": inputs.${key} → inputs.value`)
-      return 'inputs.value'
-    })
-    if (fixed === n.data.code) return n
-    return { ...n, data: { ...n.data, code: fixed } }
+    let data = { ...n.data }
+
+    // Fix LLM nodes: replace {{inputs.xxx}} or {{inputs.xxx.yyy}} placeholders with {{text}}
+    if (data.kind === 'llm' && data.llmPromptTemplate) {
+      const fixed = data.llmPromptTemplate.replace(/\{\{inputs\.[^}]+\}\}/g, (_m) => {
+        fixes.push(`"${data.label}": ${_m} → {{text}} in prompt template`)
+        return '{{text}}'
+      })
+      if (fixed !== data.llmPromptTemplate) data = { ...data, llmPromptTemplate: fixed }
+    }
+
+    // Fix function nodes: rewrite inputs.<invented_key> → inputs.value
+    if (data.kind === 'function' && data.code) {
+      const fixed = data.code.replace(/\binputs\.([a-zA-Z_]\w*)/g, (_match, key) => {
+        if (SAFE_INPUT_KEYS.has(key)) return `inputs.${key}`
+        fixes.push(`"${data.label}": inputs.${key} → inputs.value`)
+        return 'inputs.value'
+      })
+      if (fixed !== data.code) data = { ...data, code: fixed }
+    }
+
+    return data === n.data ? n : { ...n, data }
   })
 
   const edges = graph.edges.map((e) => {
