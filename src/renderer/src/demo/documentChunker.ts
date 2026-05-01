@@ -23,7 +23,7 @@ export const documentChunkerDemo: FlowProject = {
         code: '',
         prompt: '',
         noteText:
-          'Upload any .txt or .md file (articles, reports, transcripts). The Chunker splits it into manageable paragraphs, each chunk is summarised independently by an LLM, then a second LLM pass combines those summaries into a single executive summary.',
+          'Upload any .txt, .md, or .pdf file (articles, reports, transcripts). The Chunker splits it into manageable paragraphs, each chunk is summarised independently by an LLM, then a second LLM pass combines those summaries into a single executive summary.',
       },
     },
 
