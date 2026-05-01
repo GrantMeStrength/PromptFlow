@@ -1,6 +1,10 @@
 import React, { useState } from 'react'
-import { X, FileDown, FileText, Bug, Loader2 } from 'lucide-react'
+import { X, FileDown, FileText, Bug, Loader2, Copy, Check } from 'lucide-react'
+import { marked } from 'marked'
 import { useFlowStore } from '../../store/flowStore'
+
+// Configure marked for clean output
+marked.setOptions({ breaks: true })
 
 interface OutputPanelProps {
   onClose: () => void
@@ -31,7 +35,6 @@ function summariseValue(v: unknown, maxLen = 300): string {
     return `[${preview.join(', ')}${more}]`
   }
   if (typeof v === 'object') {
-    // Truncate large string fields (e.g. file content)
     const trimmed: Record<string, unknown> = {}
     for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
       if (typeof val === 'string' && val.length > 120) {
@@ -46,15 +49,37 @@ function summariseValue(v: unknown, maxLen = 300): string {
   return String(v)
 }
 
+/** Render LLM/pipeline output as formatted markdown */
+function MarkdownOutput({ text }: { text: string }) {
+  const source = text.length > 50000
+    ? text.slice(0, 50000) + '\n\n*[output truncated — use HTML export for full results]*'
+    : text
+  const html = marked.parse(source) as string
+  return (
+    <div
+      className="markdown-output px-5 py-4 text-sm text-slate-200 leading-relaxed"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  )
+}
+
 export function OutputPanel({ onClose }: OutputPanelProps) {
   const { runOutput, runOutputIsHtml, runTrace, clearOutput, isRunning } = useFlowStore()
   const [tab, setTab] = useState<'output' | 'trace'>('output')
   const [exporting, setExporting] = useState<'html' | 'pdf' | null>(null)
+  const [copied, setCopied] = useState(false)
 
-  // Switch to output tab and scroll to bottom when pipeline starts running
+  // Switch to output tab when pipeline starts running
   React.useEffect(() => {
     if (isRunning) setTab('output')
   }, [isRunning])
+
+  const handleCopy = async () => {
+    if (!runOutput) return
+    await navigator.clipboard.writeText(runOutput)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   const handleSaveHtml = async () => {
     if (!runOutput) return
@@ -78,6 +103,7 @@ export function OutputPanel({ onClose }: OutputPanelProps) {
 
   return (
     <div className="h-64 bg-[#080810] border-t border-[#2a2a3f] flex flex-col font-mono">
+      {/* Header bar */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-[#2a2a3f] shrink-0">
         <div className="flex items-center gap-3">
           {isRunning ? (
@@ -88,7 +114,6 @@ export function OutputPanel({ onClose }: OutputPanelProps) {
           ) : (
             <div className="w-2 h-2 rounded-full bg-slate-600" />
           )}
-          {/* Tabs */}
           <button
             onClick={() => setTab('output')}
             className={`text-[11px] uppercase tracking-widest transition-colors ${tab === 'output' ? 'text-slate-200' : 'text-slate-500 hover:text-slate-400'}`}
@@ -107,6 +132,16 @@ export function OutputPanel({ onClose }: OutputPanelProps) {
           </button>
         </div>
         <div className="flex items-center gap-3">
+          {runOutput && tab === 'output' && (
+            <button
+              onClick={handleCopy}
+              title="Copy to clipboard"
+              className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-emerald-400 transition-colors"
+            >
+              {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+              <span>{copied ? 'Copied!' : 'Copy'}</span>
+            </button>
+          )}
           {runOutputIsHtml && tab === 'output' && (
             <>
               <button
@@ -141,6 +176,7 @@ export function OutputPanel({ onClose }: OutputPanelProps) {
         </div>
       </div>
 
+      {/* Content */}
       <div className="flex-1 overflow-auto">
         {tab === 'output' ? (
           !runOutput ? (
@@ -148,21 +184,11 @@ export function OutputPanel({ onClose }: OutputPanelProps) {
               <span className="text-xs text-slate-600">Press Run to execute the pipeline…</span>
             </div>
           ) : runOutputIsHtml ? (
-            <div
-              className="p-3 text-sm"
-              dangerouslySetInnerHTML={{ __html: runOutput }}
-            />
+            <div className="p-3 text-sm" dangerouslySetInnerHTML={{ __html: runOutput }} />
           ) : (
-            <div className="p-3">
-              <pre className="text-xs text-green-300 whitespace-pre-wrap leading-relaxed">
-                {runOutput.length > 50000
-                  ? runOutput.slice(0, 50000) + '\n\n[… output truncated — use HTML export for full results]'
-                  : runOutput}
-              </pre>
-            </div>
+            <MarkdownOutput text={runOutput} />
           )
         ) : (
-          /* Trace tab */
           !runTrace ? (
             <div className="p-3">
               <span className="text-xs text-slate-600">Run the pipeline to see per-node execution trace.</span>

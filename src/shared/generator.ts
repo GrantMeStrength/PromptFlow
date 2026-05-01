@@ -281,7 +281,9 @@ function emitNodeBodyLines(
     lines.push(`${ind}  const __v = __rawInputs__.value?.response ?? __rawInputs__.value?.result ?? __rawInputs__.value?.value ?? (typeof __rawInputs__.value === 'string' ? __rawInputs__.value : (__rawInputs__.value != null ? JSON.stringify(__rawInputs__.value) : ''))`)
     // Shadow 'inputs' so inputs.value is always the resolved string.
     // Also destructure common hallucinated names so wizard code works regardless of key used.
-    lines.push(`${ind}  const inputs = { ...__rawInputs__, value: __v, text: __v, content: __v, answer: __v, response: __v, result: __v, data: __v, input: __v, output: __v, query: __v, summary: __v, article: __v, tagline: __v, topic: __v, question: __v, message: __v }`)
+    // Spread aliases first, then __rawInputs__ so custom keys (data, topic, etc.) always win.
+    // Force 'value' to be a string at the end — it may arrive as an object from a chained node.
+    lines.push(`${ind}  const inputs = { value: __v, text: __v, content: __v, answer: __v, response: __v, result: __v, data: __v, input: __v, output: __v, query: __v, summary: __v, article: __v, tagline: __v, topic: __v, question: __v, message: __v, ...__rawInputs__, value: (typeof __rawInputs__.value === 'string' ? __rawInputs__.value : __v) }`)
     lines.push(`${ind}  const { value, text, content, answer, response, result, data, input, output, query, summary, article, tagline, topic, question, message } = inputs`)
   }
   for (const codeLine of nodeCode.split('\n')) {

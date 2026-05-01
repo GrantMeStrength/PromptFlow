@@ -92,3 +92,24 @@
   background-size: 100% 100%, 200px 200px;
   background-attachment: local, local;
 }
+
+/* Markdown output rendering in OutputPanel */
+.markdown-output h1, .markdown-output h2, .markdown-output h3 {
+  color: #e2e8f0;
+  font-weight: 600;
+  margin: 1em 0 0.4em 0;
+  font-family: system-ui, sans-serif;
+  line-height: 1.3;
+}
+.markdown-output h1 { font-size: 1.15em; border-bottom: 1px solid #2a2a3f; padding-bottom: 0.3em; }
+.markdown-output h2 { font-size: 1.05em; }
+.markdown-output h3 { font-size: 0.95em; color: #94a3b8; }
+.markdown-output p { margin: 0.5em 0; font-family: system-ui, sans-serif; }
+.markdown-output ul, .markdown-output ol { padding-left: 1.4em; margin: 0.4em 0; font-family: system-ui, sans-serif; }
+.markdown-output li { margin: 0.2em 0; }
+.markdown-output code { background: #1e1b4b; padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.85em; color: #fbbf24; font-family: monospace; }
+.markdown-output pre { background: #0d0d1a; border: 1px solid #2a2a3f; border-radius: 6px; padding: 0.75em 1em; overflow-x: auto; margin: 0.6em 0; }
+.markdown-output pre code { background: none; padding: 0; color: #a5b4fc; }
+.markdown-output strong { color: #f1f5f9; font-weight: 600; }
+.markdown-output em { color: #cbd5e1; }
+.markdown-output blockquote { border-left: 3px solid #4f46e5; padding-left: 0.75em; margin: 0.5em 0; color: #94a3b8; font-style: italic; }
