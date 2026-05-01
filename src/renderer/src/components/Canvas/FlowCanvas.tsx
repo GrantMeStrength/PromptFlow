@@ -9,7 +9,7 @@ import ReactFlow, {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { useFlowStore } from '../../store/flowStore'
-import { InputNode, FunctionNode, LLMNode, DecisionNode, OutputNode, PipeNode, UINode, MCPNode, NoteNode, StateNode, WorkflowNode, TriggerNode, SystemPromptNode, JudgeNode } from './nodes/NodeTypes'
+import { InputNode, FunctionNode, LLMNode, DecisionNode, OutputNode, PipeNode, UINode, MCPNode, NoteNode, StateNode, WorkflowNode, TriggerNode, SystemPromptNode, JudgeNode, ChunkerNode } from './nodes/NodeTypes'
 import { GradientEdge } from './edges/GradientEdge'
 
 const nodeTypes: NodeTypes = {
@@ -27,6 +27,7 @@ const nodeTypes: NodeTypes = {
   trigger: TriggerNode,
   systemprompt: SystemPromptNode,
   judge: JudgeNode,
+  chunker: ChunkerNode,
 }
 
 const edgeTypes: EdgeTypes = {
@@ -49,6 +50,7 @@ const minimapNodeColor = (node: { type?: string }) => {
     trigger: '#94a3b8',
     systemprompt: '#14b8a6',
     judge: '#f59e0b',
+    chunker: '#f97316',
   }
   return colors[node.type ?? 'function'] ?? '#6366f1'
 }

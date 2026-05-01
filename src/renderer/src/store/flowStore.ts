@@ -185,6 +185,20 @@ const defaultNodeData = (kind: NodeKind): NodeData => {
       llmProvider: 'default',
       llmModel: '',
     },
+    chunker: {
+      label: 'Document Chunker',
+      description: 'Splits a large text document into smaller overlapping chunks for downstream processing.',
+      inputs: [{ name: 'text', type: 'string', description: 'The text to split into chunks' }],
+      outputs: [
+        { name: 'chunks', type: 'array', description: 'Array of text chunks' },
+        { name: 'count', type: 'number', description: 'Number of chunks produced' },
+        { name: 'text', type: 'string', description: 'Original text (pass-through)' },
+      ],
+      code: '',
+      chunkerSize: 500,
+      chunkerOverlap: 50,
+      chunkerStrategy: 'paragraph' as const,
+    },
   }
   return {
     kind,

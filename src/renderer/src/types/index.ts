@@ -10,7 +10,7 @@ export interface PortDef {
 
 // ─── Node Types ───────────────────────────────────────────────────────────────
 
-export type NodeKind = 'input' | 'function' | 'llm' | 'decision' | 'output' | 'pipe' | 'ui' | 'mcp' | 'note' | 'state' | 'workflow' | 'trigger' | 'systemprompt' | 'judge'
+export type NodeKind = 'input' | 'function' | 'llm' | 'decision' | 'output' | 'pipe' | 'ui' | 'mcp' | 'note' | 'state' | 'workflow' | 'trigger' | 'systemprompt' | 'judge' | 'chunker'
 
 export interface NodeData {
   label: string
@@ -67,6 +67,10 @@ export interface NodeData {
   triggerEnabled?: boolean   // whether the schedule is active
   /** For system prompt nodes */
   systemPromptContent?: string  // the system prompt text
+  /** For chunker nodes */
+  chunkerSize?: number           // max tokens/chars per chunk (default 500)
+  chunkerOverlap?: number        // overlap between chunks (default 50)
+  chunkerStrategy?: 'paragraph' | 'sentence' | 'fixed'  // split strategy
 }
 
 export interface McpToolInfo {

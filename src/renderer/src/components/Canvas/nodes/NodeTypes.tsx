@@ -2,7 +2,7 @@ import React, { memo, useState } from 'react'
 import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 import type { NodeData } from '../../../types'
-import { Download, Upload, Cpu, GitBranch, Terminal, ArrowRightLeft, MessageSquare, FileText, ListChecks, Plug, StickyNote, Database, Layers, Clock, BookOpen, Scale } from 'lucide-react'
+import { Download, Upload, Cpu, GitBranch, Terminal, ArrowRightLeft, MessageSquare, FileText, ListChecks, Plug, StickyNote, Database, Layers, Clock, BookOpen, Scale, Scissors } from 'lucide-react'
 import { useFlowStore } from '../../../store/flowStore'
 
 // ─── Shared node styles ───────────────────────────────────────────────────────
@@ -67,6 +67,12 @@ const kindMeta: Record<string, { bg: string; border: string; icon: React.ReactNo
     border: 'border-amber-400',
     icon: <Scale size={14} />,
     label: 'JUDGE',
+  },
+  chunker: {
+    bg: 'bg-orange-900/80',
+    border: 'border-orange-400',
+    icon: <Scissors size={14} />,
+    label: 'CHUNKER',
   },
 }
 
@@ -405,6 +411,7 @@ export const OutputNode = memo((props: NodeProps<NodeData>) => <BaseNode {...pro
 export const WorkflowNode = memo((props: NodeProps<NodeData>) => <BaseNode {...props} />)
 export const TriggerNode = memo((props: NodeProps<NodeData>) => <BaseNode {...props} />)
 export const JudgeNode = memo((props: NodeProps<NodeData>) => <BaseNode {...props} />)
+export const ChunkerNode = memo((props: NodeProps<NodeData>) => <BaseNode {...props} />)
 
 InputNode.displayName = 'InputNode'
 FunctionNode.displayName = 'FunctionNode'
@@ -413,6 +420,7 @@ OutputNode.displayName = 'OutputNode'
 WorkflowNode.displayName = 'WorkflowNode'
 TriggerNode.displayName = 'TriggerNode'
 JudgeNode.displayName = 'JudgeNode'
+ChunkerNode.displayName = 'ChunkerNode'
 
 // ─── System Prompt node ───────────────────────────────────────────────────────
 // Source-only node that injects a system prompt into connected LLM/Judge nodes

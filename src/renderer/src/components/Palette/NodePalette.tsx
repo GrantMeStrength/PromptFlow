@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { Download, Cpu, Terminal, GitBranch, Upload, Layers, BookOpen, MessageSquare, FileText, ListChecks, Plug, StickyNote, Database, RefreshCw, ChevronDown, ChevronRight, Clock, Scale } from 'lucide-react'
+import { Download, Cpu, Terminal, GitBranch, Upload, Layers, BookOpen, MessageSquare, FileText, ListChecks, Plug, StickyNote, Database, RefreshCw, ChevronDown, ChevronRight, Clock, Scale, Scissors } from 'lucide-react'
 import type { NodeKind, NodeData, FlowProject } from '../../types'
 import { useFlowStore } from '../../store/flowStore'
 
@@ -102,6 +102,14 @@ const paletteItems: PaletteItem[] = [
     desc: 'Evaluate content quality using an LLM — outputs score, verdict, reasoning',
     color: 'text-amber-400',
     bg: 'bg-amber-900/30 border-amber-700/50 hover:border-amber-500',
+  },
+  {
+    kind: 'chunker',
+    icon: <Scissors size={18} />,
+    label: 'Document Chunker',
+    desc: 'Split a large text into smaller overlapping chunks for LLM processing',
+    color: 'text-orange-400',
+    bg: 'bg-orange-900/30 border-orange-700/50 hover:border-orange-500',
   },
 ]
 

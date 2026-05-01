@@ -126,6 +126,44 @@ function emitNodeBodyLines(
     return
   }
 
+  if (node.data.kind === 'chunker') {
+    const size = node.data.chunkerSize ?? 500
+    const overlap = node.data.chunkerOverlap ?? 50
+    const strategy = node.data.chunkerStrategy ?? 'paragraph'
+    lines.push(`${ind}const _chunkText = String(inputs.text ?? inputs.value ?? inputs.content ?? '')`)
+    lines.push(`${ind}const _chunkSize = ${size}`)
+    lines.push(`${ind}const _chunkOverlap = ${overlap}`)
+    if (strategy === 'paragraph') {
+      lines.push(`${ind}const _rawChunks = _chunkText.split(/\\n\\s*\\n/).map(s => s.trim()).filter(Boolean)`)
+    } else if (strategy === 'sentence') {
+      lines.push(`${ind}const _rawChunks = _chunkText.split(/(?<=[.!?])\\s+/).map(s => s.trim()).filter(Boolean)`)
+    } else {
+      // fixed character split with overlap
+      lines.push(`${ind}const _rawChunks = []`)
+      lines.push(`${ind}for (let _i = 0; _i < _chunkText.length; _i += _chunkSize - _chunkOverlap) {`)
+      lines.push(`${ind}  _rawChunks.push(_chunkText.slice(_i, _i + _chunkSize))`)
+      lines.push(`${ind}}`)
+    }
+    // merge short paragraph/sentence chunks up to size
+    if (strategy !== 'fixed') {
+      lines.push(`${ind}const _chunks = []`)
+      lines.push(`${ind}let _cur = ''`)
+      lines.push(`${ind}for (const _piece of _rawChunks) {`)
+      lines.push(`${ind}  if (_cur.length + _piece.length + 2 > _chunkSize && _cur.length > 0) {`)
+      lines.push(`${ind}    _chunks.push(_cur.trim())`)
+      lines.push(`${ind}    _cur = _chunkOverlap > 0 ? _cur.slice(-_chunkOverlap) + ' ' + _piece : _piece`)
+      lines.push(`${ind}  } else {`)
+      lines.push(`${ind}    _cur = _cur ? _cur + '\\n\\n' + _piece : _piece`)
+      lines.push(`${ind}  }`)
+      lines.push(`${ind}}`)
+      lines.push(`${ind}if (_cur.trim()) _chunks.push(_cur.trim())`)
+    } else {
+      lines.push(`${ind}const _chunks = _rawChunks`)
+    }
+    lines.push(`${ind}return { chunks: _chunks, count: _chunks.length, text: _chunkText }`)
+    return
+  }
+
   if (node.data.kind === 'judge') {
     const provider = node.data.llmProvider ?? 'default'
     const rawModel = node.data.llmModel || (provider === 'ollama' ? 'llama3.2' : provider === 'anthropic' ? 'claude-3-5-sonnet-20241022' : 'gpt-4o-mini')

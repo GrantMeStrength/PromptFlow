@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import Editor from '@monaco-editor/react'
-import { X, Trash2, ChevronDown, ChevronUp, Zap, RotateCcw, Loader2, ArrowRightLeft, Sparkles, BookMarked, FolderOpen, Plug, CheckCircle, AlertCircle, Database, Layers, RefreshCw, Clock, Scale } from 'lucide-react'
+import { X, Trash2, ChevronDown, ChevronUp, Zap, RotateCcw, Loader2, ArrowRightLeft, Sparkles, BookMarked, FolderOpen, Plug, CheckCircle, AlertCircle, Database, Layers, RefreshCw, Clock, Scale, Scissors } from 'lucide-react'
 import { useFlowStore } from '../../store/flowStore'
 import type { NodeKind, NodeData, PortDef, FlowProject } from '../../types'
 
@@ -41,6 +41,7 @@ const kindColors: Record<NodeKind, string> = {
   trigger: 'bg-slate-500/20 text-slate-300 border-slate-500/40',
   systemprompt: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
   judge: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+  chunker: 'bg-orange-500/20 text-orange-300 border-orange-500/40',
 }
 
 function PortList({ ports, label }: { ports: PortDef[]; label: string }) {
@@ -939,12 +940,59 @@ export function NodeInspector() {
           </div>
         )}
 
+        {data.kind === 'chunker' && (
+          <div className="space-y-3 border border-orange-700/40 rounded-lg p-3 bg-orange-900/20">
+            <div className="flex items-center gap-2 text-xs font-semibold text-orange-300">
+              <Scissors size={13} className="text-orange-400" />
+              Chunking Settings
+            </div>
+            <div>
+              <label className="text-[11px] uppercase tracking-widest text-slate-500 block mb-1">Split Strategy</label>
+              <select
+                className="w-full bg-[#0f0f1a] text-slate-300 text-xs rounded px-2 py-1.5 border border-[#2a2a3f] focus:border-orange-500 outline-none"
+                value={data.chunkerStrategy ?? 'paragraph'}
+                onChange={(e) => updateNodeData(node.id, { chunkerStrategy: e.target.value as NodeData['chunkerStrategy'] })}
+              >
+                <option value="paragraph">By Paragraph (blank lines)</option>
+                <option value="sentence">By Sentence</option>
+                <option value="fixed">Fixed Character Size</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex-1">
+                <label className="text-[11px] text-slate-500 block mb-1">Chunk Size (chars)</label>
+                <input
+                  type="number"
+                  min={50} max={10000} step={50}
+                  className="w-full bg-[#0f0f1a] text-slate-300 text-xs rounded px-2 py-1 border border-[#2a2a3f] focus:border-orange-500 outline-none font-mono"
+                  value={data.chunkerSize ?? 500}
+                  onChange={(e) => updateNodeData(node.id, { chunkerSize: Number(e.target.value) })}
+                />
+              </div>
+              <div className="flex-1">
+                <label className="text-[11px] text-slate-500 block mb-1">Overlap (chars)</label>
+                <input
+                  type="number"
+                  min={0} max={500} step={10}
+                  className="w-full bg-[#0f0f1a] text-slate-300 text-xs rounded px-2 py-1 border border-[#2a2a3f] focus:border-orange-500 outline-none font-mono"
+                  value={data.chunkerOverlap ?? 50}
+                  onChange={(e) => updateNodeData(node.id, { chunkerOverlap: Number(e.target.value) })}
+                />
+              </div>
+            </div>
+            <div className="text-[10px] text-slate-500 space-y-0.5 pt-1 border-t border-orange-700/20">
+              <div><span className="text-slate-400 font-medium">Input:</span> <code className="text-orange-300">text</code></div>
+              <div><span className="text-slate-400 font-medium">Outputs:</span> <code className="text-orange-300">chunks</code> (array), <code className="text-orange-300">count</code> (number), <code className="text-orange-300">text</code> (pass-through)</div>
+            </div>
+          </div>
+        )}
+
         {data.kind === 'workflow' && (
           <WorkflowInspector nodeId={node.id} data={data} />
         )}
 
         {/* Code (hide for UI, MCP, State, Workflow, Trigger, SystemPrompt, and Judge nodes) */}
-        {data.kind !== 'ui' && data.kind !== 'mcp' && data.kind !== 'state' && data.kind !== 'workflow' && data.kind !== 'trigger' && data.kind !== 'systemprompt' && data.kind !== 'judge' && (
+        {data.kind !== 'ui' && data.kind !== 'mcp' && data.kind !== 'state' && data.kind !== 'workflow' && data.kind !== 'trigger' && data.kind !== 'systemprompt' && data.kind !== 'judge' && data.kind !== 'chunker' && (
         <div>
           <button
             className="flex items-center justify-between w-full text-[11px] uppercase tracking-widest text-slate-500 mb-1.5"
@@ -977,7 +1025,7 @@ export function NodeInspector() {
         )}
 
         {/* Prompt / Regenerate (hide for UI, MCP, State, Workflow, Trigger, SystemPrompt, and Judge nodes) */}
-        {data.kind !== 'ui' && data.kind !== 'mcp' && data.kind !== 'state' && data.kind !== 'workflow' && data.kind !== 'trigger' && data.kind !== 'systemprompt' && data.kind !== 'judge' && (
+        {data.kind !== 'ui' && data.kind !== 'mcp' && data.kind !== 'state' && data.kind !== 'workflow' && data.kind !== 'trigger' && data.kind !== 'systemprompt' && data.kind !== 'judge' && data.kind !== 'chunker' && (
           <div>
             <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-slate-500 mb-1.5">
               <Zap size={11} />

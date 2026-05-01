@@ -13,6 +13,7 @@ import { dataMapperProject } from '../../demo/dataMapper'
 import { barChartProject } from '../../demo/barChart'
 import { reportGeneratorDemo } from '../../demo/reportGenerator'
 import { adventureGameProject } from '../../demo/adventureGame'
+import { documentChunkerDemo } from '../../demo/documentChunker'
 import type { FlowProject } from '../../types'
 
 const EXAMPLES: { label: string; description: string; project: FlowProject }[] = [
@@ -55,6 +56,11 @@ const EXAMPLES: { label: string; description: string; project: FlowProject }[] =
     label: 'Adventure Game',
     description: 'Decision routing: type a location to explore',
     project: adventureGameProject,
+  },
+  {
+    label: 'Long Document Summariser',
+    description: 'Chunk → per-chunk LLM summaries → executive summary',
+    project: documentChunkerDemo,
   },
 ]
 
