@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react'
-import { Play, X, MessageSquare, FileText, ListChecks, Files } from 'lucide-react'
+import { Play, X, MessageSquare, FileText, ListChecks, Files, Loader2 } from 'lucide-react'
 import { useFlowStore } from '../../store/flowStore'
 
 type FileEntry = { filename: string; content: string; value: string; type: string; size: number }
@@ -12,6 +12,7 @@ export default function UIInputModal() {
 
   // One value entry per UI node
   const [values, setValues] = useState<Record<string, unknown>>({})
+  const [loading, setLoading] = useState<Record<string, boolean>>({})
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   if (!pendingUiRun) return null
@@ -19,39 +20,30 @@ export default function UIInputModal() {
   const setValue = (nodeId: string, value: unknown) =>
     setValues((prev) => ({ ...prev, [nodeId]: value }))
 
-  /** Read a single File into a FileEntry object */
-  const readFileToEntry = (file: File): Promise<FileEntry> =>
-    new Promise((resolve) => {
-      const reader = new FileReader()
-      const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
-      const isText =
-        !isPdf &&
-        (file.type.startsWith('text/') ||
-          /\.(txt|md|csv|json|xml|html|js|ts|py|sh)$/i.test(file.name))
-      reader.onload = (e) => {
-        const raw = String(e.target?.result ?? '')
-        // For PDFs, return an empty content with a clear warning marker so downstream
-        // nodes receive a useful message instead of a base64 data URL.
-        const content = isPdf
-          ? `[PDF text extraction is not supported. Please convert "${file.name}" to .txt or .md before uploading.]`
-          : raw
-        // `value` is an alias for `content` so the standard `value` output port works downstream
-        resolve({ filename: file.name, type: file.type, size: file.size, content, value: content })
+  /** Read a single File into a FileEntry using the Promise-based file.text() API */
+  const readFileToEntry = async (file: File): Promise<FileEntry> => {
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
+    let content: string
+    if (isPdf) {
+      content = `[PDF text extraction is not supported. Please convert "${file.name}" to .txt or .md before uploading.]`
+    } else {
+      try {
+        content = await file.text()
+      } catch {
+        content = `[Error reading file "${file.name}"]`
       }
-      if (isText) reader.readAsText(file)
-      else if (isPdf) reader.readAsText(file) // will be empty/garbage but we replace with warning above
-      else reader.readAsDataURL(file)
-    })
-
+    }
+    return { filename: file.name, type: file.type, size: file.size, content, value: content }
+  }
 
   const handleFiles = async (nodeId: string, fileList: FileList | null, multiple: boolean) => {
     if (!fileList || fileList.length === 0) { setValue(nodeId, undefined); return }
-    const entries = await Promise.all(Array.from(fileList).map(readFileToEntry))
-    // Single-file nodes: keep flat { filename, content, type, size } for backward compat
-    if (!multiple) {
-      setValue(nodeId, entries[0])
-    } else {
-      setValue(nodeId, { files: entries })
+    setLoading((prev) => ({ ...prev, [nodeId]: true }))
+    try {
+      const entries = await Promise.all(Array.from(fileList).map(readFileToEntry))
+      setValue(nodeId, multiple ? { files: entries } : entries[0])
+    } finally {
+      setLoading((prev) => ({ ...prev, [nodeId]: false }))
     }
   }
 
@@ -71,7 +63,10 @@ export default function UIInputModal() {
     }
     submitUiInputs(collected)
     setValues({})
+    setLoading({})
   }
+
+  const isLoading = Object.values(loading).some(Boolean)
 
   const kindIcon = (kind?: string, multiple?: boolean) => {
     if (kind === 'file') return multiple
@@ -91,7 +86,7 @@ export default function UIInputModal() {
             <p className="text-[11px] text-slate-500 mt-0.5">Fill in the fields below to run the pipeline</p>
           </div>
           <button
-            onClick={() => { cancelUiRun(); setValues({}) }}
+            onClick={() => { cancelUiRun(); setValues({}); setLoading({}) }}
             className="text-slate-500 hover:text-slate-300 transition-colors p-1"
           >
             <X size={16} />
@@ -193,17 +188,18 @@ export default function UIInputModal() {
         {/* Footer */}
         <div className="px-5 py-4 border-t border-[#2a2a3f] flex gap-3 justify-end">
           <button
-            onClick={() => { cancelUiRun(); setValues({}) }}
+            onClick={() => { cancelUiRun(); setValues({}); setLoading({}) }}
             className="px-4 py-2 text-sm rounded-xl border border-[#2a2a3f] text-slate-400 hover:text-slate-200 transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
-            className="flex items-center gap-2 px-5 py-2 text-sm rounded-xl bg-fuchsia-600 hover:bg-fuchsia-500 text-white transition-colors"
+            disabled={isLoading}
+            className="flex items-center gap-2 px-5 py-2 text-sm rounded-xl bg-fuchsia-600 hover:bg-fuchsia-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
           >
-            <Play size={13} />
-            Run Pipeline
+            {isLoading ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
+            {isLoading ? 'Reading file…' : 'Run Pipeline'}
           </button>
         </div>
       </div>
