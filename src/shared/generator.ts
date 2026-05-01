@@ -92,7 +92,7 @@ function emitNodeBodyLines(
         if (node.data.uiMultiple) {
           lines.push(`${ind}return __uiInputs__['${node.id}'] ?? { files: [] }`)
         } else {
-          lines.push(`${ind}return __uiInputs__['${node.id}'] ?? { filename: '', content: '', type: '', size: 0 }`)
+          lines.push(`${ind}return __uiInputs__['${node.id}'] ?? { filename: '', content: '', value: '', type: '', size: 0 }`)
         }
         break
       case 'choice':
@@ -130,7 +130,10 @@ function emitNodeBodyLines(
     const size = node.data.chunkerSize ?? 500
     const overlap = node.data.chunkerOverlap ?? 50
     const strategy = node.data.chunkerStrategy ?? 'paragraph'
-    lines.push(`${ind}const _chunkText = String(inputs.text ?? inputs.value ?? inputs.content ?? '')`)
+    lines.push(`${ind}const _rawInput = inputs.text ?? inputs.value ?? inputs.content ?? ''`)
+    lines.push(`${ind}const _chunkText = typeof _rawInput === 'object' && _rawInput !== null`)
+    lines.push(`${ind}  ? String(_rawInput.content ?? _rawInput.value ?? _rawInput.text ?? (Array.isArray(_rawInput.chunks) ? _rawInput.chunks.join('\\n\\n') : ''))`)
+    lines.push(`${ind}  : String(_rawInput)`)
     lines.push(`${ind}const _chunkSize = ${size}`)
     lines.push(`${ind}const _chunkOverlap = ${overlap}`)
     if (strategy === 'paragraph') {
@@ -418,11 +421,10 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
       } else if (sources) {
         for (const [targetHandle, { srcId, handle, explicit }] of sources) {
           const srcFn = `results["${srcId}"]`
-          if (explicit) {
-            inputParts.push(`"${targetHandle}": ${srcFn}?.["${handle}"]`)
-          } else {
-            inputParts.push(`"${targetHandle}": ${srcFn}?.["${handle}"] ?? ${srcFn}`)
-          }
+          // Always include a fallback to the full result for both explicit and implicit edges.
+          // If the source node returns an object without the expected handle key, the downstream
+          // node receives the whole object rather than undefined.
+          inputParts.push(`"${targetHandle}": ${srcFn}?.["${handle}"] ?? ${srcFn}`)
         }
       }
       // If this node has a connected system prompt node, inject it as __systemPrompt__

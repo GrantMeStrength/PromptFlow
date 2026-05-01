@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react'
 import { Play, X, MessageSquare, FileText, ListChecks, Files } from 'lucide-react'
 import { useFlowStore } from '../../store/flowStore'
 
-type FileEntry = { filename: string; content: string; type: string; size: number }
+type FileEntry = { filename: string; content: string; value: string; type: string; size: number }
 
 export default function UIInputModal() {
   const pendingUiRun = useFlowStore((s) => s.pendingUiRun)
@@ -23,14 +23,26 @@ export default function UIInputModal() {
   const readFileToEntry = (file: File): Promise<FileEntry> =>
     new Promise((resolve) => {
       const reader = new FileReader()
+      const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
       const isText =
-        file.type.startsWith('text/') ||
-        /\.(txt|md|csv|json|xml|html|js|ts|py|sh)$/i.test(file.name)
-      reader.onload = (e) =>
-        resolve({ filename: file.name, type: file.type, size: file.size, content: String(e.target?.result ?? '') })
+        !isPdf &&
+        (file.type.startsWith('text/') ||
+          /\.(txt|md|csv|json|xml|html|js|ts|py|sh)$/i.test(file.name))
+      reader.onload = (e) => {
+        const raw = String(e.target?.result ?? '')
+        // For PDFs, return an empty content with a clear warning marker so downstream
+        // nodes receive a useful message instead of a base64 data URL.
+        const content = isPdf
+          ? `[PDF text extraction is not supported. Please convert "${file.name}" to .txt or .md before uploading.]`
+          : raw
+        // `value` is an alias for `content` so the standard `value` output port works downstream
+        resolve({ filename: file.name, type: file.type, size: file.size, content, value: content })
+      }
       if (isText) reader.readAsText(file)
+      else if (isPdf) reader.readAsText(file) // will be empty/garbage but we replace with warning above
       else reader.readAsDataURL(file)
     })
+
 
   const handleFiles = async (nodeId: string, fileList: FileList | null, multiple: boolean) => {
     if (!fileList || fileList.length === 0) { setValue(nodeId, undefined); return }
@@ -52,7 +64,7 @@ export default function UIInputModal() {
       } else if (data.uiKind === 'text') {
         collected[nodeId] = { value: '' }
       } else if (data.uiKind === 'file') {
-        collected[nodeId] = data.uiMultiple ? { files: [] } : { filename: '', content: '', type: '', size: 0 }
+        collected[nodeId] = data.uiMultiple ? { files: [] } : { filename: '', content: '', value: '', type: '', size: 0 }
       } else {
         collected[nodeId] = { choice: data.uiOptions?.[0] ?? '', index: 0 }
       }
