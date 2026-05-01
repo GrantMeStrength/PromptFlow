@@ -300,9 +300,9 @@ function generateSubWorkflowIIFE(
         const sources = inputSources.get(node.id)
         const inputParts: string[] = []
         if (sources) {
-          for (const [targetHandle, { srcId, handle, explicit }] of sources) {
+          for (const [targetHandle, { srcId, handle }] of sources) {
             const ref = `_r["${srcId}"]`
-            inputParts.push(explicit ? `"${targetHandle}": ${ref}?.["${handle}"]` : `"${targetHandle}": ${ref}?.["${handle}"] ?? ${ref}`)
+            inputParts.push(`"${targetHandle}": ${ref}?.["${handle}"] ?? ${ref}`)
           }
         }
         lines.push(`${ind}_r["${node.id}"] = await ${fnId}({ ${inputParts.join(', ')} })`)
@@ -314,9 +314,9 @@ function generateSubWorkflowIIFE(
       const sources = inputSources.get(node.id)
       const inputParts: string[] = []
       if (node.data.kind !== 'ui' && sources) {
-        for (const [targetHandle, { srcId, handle, explicit }] of sources) {
+        for (const [targetHandle, { srcId, handle }] of sources) {
           const ref = `_r["${srcId}"]`
-          inputParts.push(explicit ? `"${targetHandle}": ${ref}?.["${handle}"]` : `"${targetHandle}": ${ref}?.["${handle}"] ?? ${ref}`)
+          inputParts.push(`"${targetHandle}": ${ref}?.["${handle}"] ?? ${ref}`)
         }
       }
       // Inject system prompt from connected systemprompt node
@@ -404,6 +404,7 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
   lines.push(`// ── Pipeline Orchestrator ──`)
   lines.push(`async function runPipeline(initialInput) {`)
   lines.push(`  const results = {}`)
+  lines.push(`  const __trace__ = []`)
   lines.push(``)
 
   for (const node of sorted) {
@@ -419,7 +420,7 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
       if (node.data.kind === 'input') {
         inputParts.push(`...initialInput`)
       } else if (sources) {
-        for (const [targetHandle, { srcId, handle, explicit }] of sources) {
+        for (const [targetHandle, { srcId, handle }] of sources) {
           const srcFn = `results["${srcId}"]`
           // Always include a fallback to the full result for both explicit and implicit edges.
           // If the source node returns an object without the expected handle key, the downstream
@@ -435,12 +436,15 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
       const inputsExpr = `{ ${inputParts.join(', ')} }`
       lines.push(`  results["${node.id}"] = await ${fnName}(${inputsExpr})`)
     }
+    if (node.data.kind !== 'note') {
+      lines.push(`  __trace__.push({ id: ${JSON.stringify(node.id)}, label: ${JSON.stringify(node.data.label)}, kind: ${JSON.stringify(node.data.kind)}, output: results["${node.id}"] })`)
+    }
   }
 
-  // Return last node's output
+  // Return last node's output alongside the trace
   const lastNode = sorted[sorted.length - 1]
   lines.push(``)
-  lines.push(`  return results["${lastNode.id}"]`)
+  lines.push(`  return { __result: results["${lastNode.id}"], __trace: __trace__ }`)
   lines.push(`}`)
   lines.push(``)
   lines.push(`// Entry point`)

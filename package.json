@@ -36,6 +36,7 @@
     "cronstrue": "^3.14.0",
     "lucide-react": "^1.11.0",
     "node-cron": "^4.2.1",
+    "pdfjs-dist": "^5.7.284",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "reactflow": "^11.11.4",

@@ -14,6 +14,7 @@ interface FlowState {
   runOutput: string
   runOutputIsHtml: boolean
   showOutput: boolean
+  runTrace: Array<{ id: string; label: string; kind: string; output: unknown }> | null
   /** True when there are unsaved changes */
   isDirty: boolean
   /** Filesystem path of the currently open file (library save path) */
@@ -220,6 +221,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   runOutput: '',
   runOutputIsHtml: false,
   showOutput: false,
+  runTrace: null,
   isDirty: false,
   projectPath: null,
   pendingPipeNodeId: null,
@@ -402,6 +404,15 @@ export const useFlowStore = create<FlowState>((set, get) => ({
         if (result instanceof Promise) result = await result
       }
 
+      // Extract execution trace if the generator embedded it
+      type TraceEntry = { id: string; label: string; kind: string; output: unknown }
+      let trace: TraceEntry[] | null = null
+      if (result !== null && typeof result === 'object' && '__trace' in (result as object)) {
+        const r = result as { __result: unknown; __trace: TraceEntry[] }
+        trace = r.__trace
+        result = r.__result
+      }
+
       // Check for rich HTML output
       const isHtml = result !== null && typeof result === 'object' && '__html' in (result as object)
       nodes.forEach((n) => updateNodeData(n.id, { hasError: false }))
@@ -410,6 +421,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
           isRunning: false,
           runOutputIsHtml: true,
           runOutput: (result as { __html: string }).__html,
+          runTrace: trace,
         })
       } else {
         // Unwrap single-value objects so plain text results don't appear as JSON.
@@ -431,6 +443,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
           isRunning: false,
           runOutputIsHtml: false,
           runOutput: s.runOutput + `✅ Done\n\n${display}`,
+          runTrace: trace,
         }))
       }
     } catch (err) {
@@ -441,7 +454,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     }
   },
 
-  clearOutput: () => set({ runOutput: '', runOutputIsHtml: false }),
+  clearOutput: () => set({ runOutput: '', runOutputIsHtml: false, runTrace: null }),
   toggleOutput: () => set((s) => ({ showOutput: !s.showOutput })),
 
   getGeneratedCode: () => {
