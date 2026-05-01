@@ -278,7 +278,12 @@ function emitNodeBodyLines(
   // For function nodes, inject a safe 'value' binding so wizard-generated code
   // can use 'value' directly without worrying about key names or nesting.
   if (node.data.kind === 'function') {
-    lines.push(`${ind}  const value = inputs.value?.response ?? inputs.value?.result ?? inputs.value?.value ?? (typeof inputs.value === 'string' ? inputs.value : (inputs.value != null ? JSON.stringify(inputs.value) : ''))`)
+    lines.push(`${ind}  const __v = inputs.value?.response ?? inputs.value?.result ?? inputs.value?.value ?? (typeof inputs.value === 'string' ? inputs.value : (inputs.value != null ? JSON.stringify(inputs.value) : ''))`)
+    // Alias every key in inputs + common invented names so wizard-generated code
+    // works regardless of what key name the LLM hallucinated.
+    lines.push(`${ind}  const value = __v`)
+    lines.push(`${ind}  const _inp = new Proxy(inputs, { get(t,k) { if (k in t) return t[k]; return __v } })`)
+    lines.push(`${ind}  const { text=__v, content=__v, answer=__v, response=__v, result=__v, data=__v, input=__v, output=__v, query=__v, summary=__v, article=__v, tagline=__v, topic=__v, question=__v, message=__v } = _inp`)
   }
   for (const codeLine of nodeCode.split('\n')) {
     lines.push(`${ind}  ${codeLine}`)
