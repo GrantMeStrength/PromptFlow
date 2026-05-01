@@ -196,19 +196,25 @@ export function OutputPanel({ onClose }: OutputPanelProps) {
           ) : (
             <div className="p-2 space-y-1">
               {runTrace.map((entry) => {
-                const colorCls = KIND_COLORS[entry.kind] ?? 'bg-slate-800/80 text-slate-300 border-slate-600'
-                const isEmpty = entry.output === undefined || entry.output === null ||
+                const hasError = !!(entry as { error?: string }).error
+                const colorCls = hasError
+                  ? 'bg-red-900/60 text-red-300 border-red-700'
+                  : (KIND_COLORS[entry.kind] ?? 'bg-slate-800/80 text-slate-300 border-slate-600')
+                const isEmpty = !hasError && (entry.output === undefined || entry.output === null ||
                   (typeof entry.output === 'object' && !Array.isArray(entry.output) &&
-                    Object.values(entry.output as object).every(v => v === '' || v === 0 || (Array.isArray(v) && v.length === 0)))
+                    Object.values(entry.output as object).every(v => v === '' || v === 0 || (Array.isArray(v) && v.length === 0))))
                 return (
                   <div key={entry.id} className={`rounded border px-2 py-1 ${colorCls} ${isEmpty ? 'opacity-50' : ''}`}>
                     <div className="flex items-center gap-2 mb-0.5">
                       <span className="text-[10px] font-semibold uppercase tracking-wide">{entry.label}</span>
                       <span className="text-[9px] opacity-60">{entry.kind}</span>
-                      {isEmpty && <span className="text-[9px] text-yellow-400">⚠ empty</span>}
+                      {hasError && <span className="text-[9px] text-red-400">❌ error</span>}
+                      {isEmpty && !hasError && <span className="text-[9px] text-yellow-400">⚠ empty</span>}
                     </div>
                     <pre className="text-[10px] opacity-80 whitespace-pre-wrap break-all leading-relaxed">
-                      {summariseValue(entry.output)}
+                      {hasError
+                        ? (entry as { error?: string }).error
+                        : summariseValue(entry.output)}
                     </pre>
                   </div>
                 )

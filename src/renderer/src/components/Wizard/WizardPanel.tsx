@@ -110,7 +110,12 @@ YOUR BEHAVIOUR:
 4. The JSON must be: { "nodes": [...], "edges": [...] }
 5. Keep node counts reasonable (3-8 nodes).
 6. For LLM nodes, always write a meaningful llmPromptTemplate using {{variable}} placeholders.
-7. ALWAYS use "ui" nodes (not "input") for any value the user should provide at runtime.`
+7. ALWAYS use "ui" nodes (not "input") for any value the user should provide at runtime.
+8. FUNCTION NODE CODE RULES — the sandbox has NO require()/import. Available globals: fetch (async HTTP), JSON, Math, Date, Array, Object, String, Number, RegExp, Set, Map, Promise, callLLM, getState, setState, encodeURIComponent, decodeURIComponent.
+   - For file upload inputs: the file content is already in inputs.content (string) — do NOT try to read a path.
+   - For HTTP requests: use "const r = await fetch(url); const text = await r.text()" — always async/await.
+   - Never call require(), fs, path, or any Node.js module.
+   - Never use synchronous HTTP (sync-request, XMLHttpRequest).`
 
 const ANALYSIS_SYSTEM_PROMPT = `You are a PromptFlow workflow analyst. You will be given a description of a visual node-graph workflow and must analyse it for potential issues.
 
@@ -200,37 +205,45 @@ function serializeGraph(nodes: FlowNode[], edges: FlowEdge[]): string {
   return lines.join('\n')
 }
 
-function validateGraph(obj: unknown): { nodes: FlowNode[]; edges: FlowEdge[] } | null {
-  if (!obj || typeof obj !== 'object') return null
+function validateGraph(obj: unknown): { ok: true; graph: { nodes: FlowNode[]; edges: FlowEdge[] } } | { ok: false; error: string } {
+  if (!obj || typeof obj !== 'object') return { ok: false, error: 'Response does not contain a valid graph object.' }
   const g = obj as Record<string, unknown>
-  if (!Array.isArray(g.nodes) || !Array.isArray(g.edges)) return null
+  if (!Array.isArray(g.nodes) || !Array.isArray(g.edges)) return { ok: false, error: 'Graph is missing nodes or edges arrays.' }
   const nodeIds = new Set<string>()
   for (const n of g.nodes as unknown[]) {
-    if (!n || typeof n !== 'object') return null
+    if (!n || typeof n !== 'object') return { ok: false, error: 'A node is not a valid object.' }
     const node = n as Record<string, unknown>
-    if (typeof node.id !== 'string' || !node.id) return null
+    if (typeof node.id !== 'string' || !node.id) return { ok: false, error: 'A node is missing a valid id.' }
     const data = node.data as Record<string, unknown> | undefined
-    if (!data) return null
-    if (!VALID_KINDS.includes(data.kind as NodeKind)) return null
+    if (!data) return { ok: false, error: `Node "${node.id}" has no data field.` }
+    if (!VALID_KINDS.includes(data.kind as NodeKind)) {
+      return { ok: false, error: `Unknown node type "${data.kind}" on node "${node.id}". Valid types: ${VALID_KINDS.join(', ')}.` }
+    }
     nodeIds.add(node.id)
   }
   for (const e of g.edges as unknown[]) {
-    if (!e || typeof e !== 'object') return null
+    if (!e || typeof e !== 'object') return { ok: false, error: 'An edge is not a valid object.' }
     const edge = e as Record<string, unknown>
-    if (typeof edge.id !== 'string') return null
-    if (!nodeIds.has(edge.source as string) || !nodeIds.has(edge.target as string)) return null
+    if (typeof edge.id !== 'string') return { ok: false, error: 'An edge is missing a valid id.' }
+    if (!nodeIds.has(edge.source as string) || !nodeIds.has(edge.target as string)) {
+      return { ok: false, error: `Edge "${edge.id}" references a node id that does not exist in this graph.` }
+    }
   }
-  return g as { nodes: FlowNode[]; edges: FlowEdge[] }
+  return { ok: true, graph: g as { nodes: FlowNode[]; edges: FlowEdge[] } }
 }
 
-function extractGraph(text: string): { nodes: FlowNode[]; edges: FlowEdge[] } | null {
+function extractGraph(text: string): { ok: true; graph: { nodes: FlowNode[]; edges: FlowEdge[] } } | { ok: false; error: string } | null {
   const match = text.match(/```json\s*([\s\S]*?)```/)
   if (!match) return null
+  let parsed: unknown
   try {
-    return validateGraph(JSON.parse(match[1]))
-  } catch {
-    return null
+    // Strip trailing commas (common LLM JSON mistake) before parsing
+    const cleaned = match[1].replace(/,(\s*[}\]])/g, '$1')
+    parsed = JSON.parse(cleaned)
+  } catch (e) {
+    return { ok: false, error: `Could not parse JSON from response: ${e instanceof Error ? e.message : String(e)}` }
   }
+  return validateGraph(parsed)
 }
 
 // Known safe inputs.* keys that the runtime injects — don't rewrite these.
@@ -328,13 +341,20 @@ export function WizardPanel({ onClose }: WizardPanelProps) {
       setMessages([...nextMessages, assistantMsg])
       const raw = extractGraph(reply)
       if (raw) {
-        const { graph, fixes } = sanitizeGraph(raw)
-        setPendingGraph(graph)
-        if (fixes.length > 0) {
+        if (!raw.ok) {
           setMessages((prev) => [
             ...prev,
-            { role: 'assistant', content: `🔧 **Auto-corrected ${fixes.length} issue${fixes.length > 1 ? 's' : ''}:**\n${fixes.map((f) => `- ${f}`).join('\n')}` },
+            { role: 'assistant', content: `⚠️ **Could not apply workflow:** ${raw.error}\n\nPlease try rephrasing your request or ask the wizard to fix the issue.` },
           ])
+        } else {
+          const { graph, fixes } = sanitizeGraph(raw.graph)
+          setPendingGraph(graph)
+          if (fixes.length > 0) {
+            setMessages((prev) => [
+              ...prev,
+              { role: 'assistant', content: `🔧 **Auto-corrected ${fixes.length} issue${fixes.length > 1 ? 's' : ''}:**\n${fixes.map((f) => `- ${f}`).join('\n')}` },
+            ])
+          }
         }
       }
     } catch (e) {

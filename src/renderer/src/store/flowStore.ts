@@ -13,7 +13,7 @@ interface FlowState {
   runOutput: string
   runOutputIsHtml: boolean
   showOutput: boolean
-  runTrace: Array<{ id: string; label: string; kind: string; output: unknown }> | null
+  runTrace: Array<{ id: string; label: string; kind: string; output: unknown; error?: string }> | null
   /** True when there are unsaved changes */
   isDirty: boolean
   /** Filesystem path of the currently open file (library save path) */
@@ -49,6 +49,7 @@ interface FlowState {
   runPipeline: () => Promise<void>
   submitUiInputs: (values: Record<string, unknown>) => Promise<void>
   cancelUiRun: () => void
+  cancelRun: () => void
   clearOutput: () => void
   toggleOutput: () => void
 
@@ -390,6 +391,10 @@ export const useFlowStore = create<FlowState>((set, get) => ({
 
   cancelUiRun: () => set({ pendingUiRun: false, uiNodesInfo: [] }),
 
+  cancelRun: () => {
+    window.electronAPI?.cancelRun?.()
+  },
+
   _executePipeline: async (uiInputs: Record<string, unknown>) => {
     const { nodes, edges, updateNodeData } = get()
 
@@ -416,7 +421,15 @@ export const useFlowStore = create<FlowState>((set, get) => ({
 
       if (api) {
         const res = await api.runCode(code, {}, uiInputs)
-        if (!res.success) throw new Error(res.error)
+        if (!res.success) {
+          if (res.error === '__RUN_CANCELLED__') {
+            unsubNodeRunning?.()
+            set({ isRunning: false, runningNodeId: null })
+            set((s) => ({ runOutput: s.runOutput + '\n⏹ Run cancelled' }))
+            return
+          }
+          throw new Error(res.error)
+        }
         result = res.result
       } else {
         // Browser fallback: run in eval (dev only) with in-memory state store
@@ -433,7 +446,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       set({ runningNodeId: null })
 
       // Extract execution trace if the generator embedded it
-      type TraceEntry = { id: string; label: string; kind: string; output: unknown }
+      type TraceEntry = { id: string; label: string; kind: string; output: unknown; error?: string }
       let trace: TraceEntry[] | null = null
       if (result !== null && typeof result === 'object' && '__trace' in (result as object)) {
         const r = result as { __result: unknown; __trace: TraceEntry[] }

@@ -453,11 +453,15 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
   for (const node of sorted) {
     const fnName = nodeToFnName(node.id, node.data.label)
     const sources = inputSources.get(node.id)
+    const nodeIdJson = JSON.stringify(node.id)
+    const nodeLabelJson = JSON.stringify(node.data.label)
+    const nodeKindJson = JSON.stringify(node.data.kind)
 
     if (node.data.kind === 'ui') {
-      // UI nodes get their value from __uiInputs__ — no edge wiring needed
-      lines.push(`  if (typeof __notifyNode__ === 'function') await __notifyNode__(${JSON.stringify(node.id)})`)
-      lines.push(`  results["${node.id}"] = await ${fnName}({})`)
+      // UI nodes read from __uiInputs__ — cannot fail, no try/catch needed
+      lines.push(`  if (typeof __notifyNode__ === 'function') await __notifyNode__(${nodeIdJson})`)
+      lines.push(`  results[${nodeIdJson}] = await ${fnName}({})`)
+      lines.push(`  __trace__.push({ id: ${nodeIdJson}, label: ${nodeLabelJson}, kind: ${nodeKindJson}, output: results[${nodeIdJson}] })`)
     } else if (node.data.kind === 'judge') {
       // Judge nodes: wire content (from LLM/function/chunker) and criteria (from UI/input) by source kind
       const judgeEdges = edges.filter(e => e.target === node.id)
@@ -466,8 +470,7 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
         const srcNode = nodeById.get(e.source)
         if (!srcNode) continue
         const srcKind = srcNode.data.kind
-        const srcFn = `results["${e.source}"]`
-        // Resolve to a usable value — prefer response/content/value fields over raw object
+        const srcFn = `results[${JSON.stringify(e.source)}]`
         const resolved = `${srcFn}?.response ?? ${srcFn}?.content ?? ${srcFn}?.value ?? ${srcFn}?.result ?? ${srcFn}`
         if (srcKind === 'ui' || srcKind === 'input') {
           inputParts.push(`"criteria": ${resolved}`)
@@ -477,8 +480,19 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
       }
       const spSrcId = systemPromptSources.get(node.id)
       if (spSrcId) inputParts.push(`"__systemPrompt__": results[${JSON.stringify(spSrcId)}]?.system_prompt`)
-      lines.push(`  if (typeof __notifyNode__ === 'function') await __notifyNode__(${JSON.stringify(node.id)})`)
-      lines.push(`  results["${node.id}"] = await ${fnName}({ ${inputParts.join(', ')} })`)
+      const inputsExpr = `{ ${inputParts.join(', ')} }`
+      lines.push(`  try {`)
+      lines.push(`    if (typeof __notifyNode__ === 'function') await __notifyNode__(${nodeIdJson})`)
+      lines.push(`    results[${nodeIdJson}] = await ${fnName}(${inputsExpr})`)
+      lines.push(`    __trace__.push({ id: ${nodeIdJson}, label: ${nodeLabelJson}, kind: ${nodeKindJson}, output: results[${nodeIdJson}] })`)
+      lines.push(`  } catch(__e) {`)
+      lines.push(`    const __msg = __e instanceof Error ? __e.message : String(__e)`)
+      lines.push(`    results[${nodeIdJson}] = { __error: true, message: __msg }`)
+      lines.push(`    __trace__.push({ id: ${nodeIdJson}, label: ${nodeLabelJson}, kind: ${nodeKindJson}, error: __msg, output: null })`)
+      lines.push(`  }`)
+    } else if (node.data.kind === 'note') {
+      // Note nodes are display-only — no execution, no trace entry
+      lines.push(`  results[${nodeIdJson}] = await ${fnName}({})`)
     } else {
       // Build the inputs object for this node
       const inputParts: string[] = []
@@ -486,24 +500,37 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
         inputParts.push(`...initialInput`)
       } else if (sources) {
         for (const [targetHandle, { srcId, handle }] of sources) {
-          const srcFn = `results["${srcId}"]`
-          // Always include a fallback to the full result for both explicit and implicit edges.
-          // If the source node returns an object without the expected handle key, the downstream
-          // node receives the whole object rather than undefined.
+          const srcFn = `results[${JSON.stringify(srcId)}]`
           inputParts.push(`"${targetHandle}": ${srcFn}?.["${handle}"] ?? ${srcFn}`)
         }
       }
-      // If this node has a connected system prompt node, inject it as __systemPrompt__
       const spSrcId = systemPromptSources.get(node.id)
       if (spSrcId) {
         inputParts.push(`"__systemPrompt__": results[${JSON.stringify(spSrcId)}]?.system_prompt`)
       }
       const inputsExpr = `{ ${inputParts.join(', ')} }`
-      lines.push(`  if (typeof __notifyNode__ === 'function') await __notifyNode__(${JSON.stringify(node.id)})`)
-      lines.push(`  results["${node.id}"] = await ${fnName}(${inputsExpr})`)
-    }
-    if (node.data.kind !== 'note') {
-      lines.push(`  __trace__.push({ id: ${JSON.stringify(node.id)}, label: ${JSON.stringify(node.data.label)}, kind: ${JSON.stringify(node.data.kind)}, output: results["${node.id}"] })`)
+      // Collect source node IDs to check for upstream errors
+      const upstreamIds = sources ? [...sources.values()].map(s => JSON.stringify(s.srcId)) : []
+      lines.push(`  try {`)
+      if (upstreamIds.length > 0) {
+        lines.push(`    if ([${upstreamIds.join(', ')}].some(id => results[id]?.__error)) {`)
+        lines.push(`      results[${nodeIdJson}] = { __error: true, message: 'Skipped: upstream node failed' }`)
+        lines.push(`      __trace__.push({ id: ${nodeIdJson}, label: ${nodeLabelJson}, kind: ${nodeKindJson}, error: 'Skipped: upstream node failed', output: null })`)
+        lines.push(`    } else {`)
+        lines.push(`      if (typeof __notifyNode__ === 'function') await __notifyNode__(${nodeIdJson})`)
+        lines.push(`      results[${nodeIdJson}] = await ${fnName}(${inputsExpr})`)
+        lines.push(`      __trace__.push({ id: ${nodeIdJson}, label: ${nodeLabelJson}, kind: ${nodeKindJson}, output: results[${nodeIdJson}] })`)
+        lines.push(`    }`)
+      } else {
+        lines.push(`    if (typeof __notifyNode__ === 'function') await __notifyNode__(${nodeIdJson})`)
+        lines.push(`    results[${nodeIdJson}] = await ${fnName}(${inputsExpr})`)
+        lines.push(`    __trace__.push({ id: ${nodeIdJson}, label: ${nodeLabelJson}, kind: ${nodeKindJson}, output: results[${nodeIdJson}] })`)
+      }
+      lines.push(`  } catch(__e) {`)
+      lines.push(`    const __msg = __e instanceof Error ? __e.message : String(__e)`)
+      lines.push(`    results[${nodeIdJson}] = { __error: true, message: __msg }`)
+      lines.push(`    __trace__.push({ id: ${nodeIdJson}, label: ${nodeLabelJson}, kind: ${nodeKindJson}, error: __msg, output: null })`)
+      lines.push(`  }`)
     }
   }
 
@@ -511,7 +538,7 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
   const lastNode = sorted[sorted.length - 1]
   lines.push(``)
   lines.push(`  if (typeof __notifyNode__ === 'function') await __notifyNode__(null)`)
-  lines.push(`  return { __result: results["${lastNode.id}"], __trace: __trace__ }`)
+  lines.push(`  return { __result: results[${JSON.stringify(lastNode.id)}], __trace: __trace__ }`)
   lines.push(`}`)
   lines.push(``)
   lines.push(`// Entry point`)

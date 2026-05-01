@@ -75,7 +75,7 @@ interface ToolbarProps {
 }
 
 export function Toolbar({ showOutput, onToggleOutput, showCode, onToggleCode, onOpenSettings, onOpenLibrary, onOpenWizard }: ToolbarProps) {
-  const { project, isRunning, runPipeline, newProject, loadProject, getProject, getGeneratedCode, isDirty, markSaved } =
+  const { project, isRunning, runPipeline, cancelRun, newProject, loadProject, getProject, getGeneratedCode, isDirty, markSaved } =
     useFlowStore()
   const [saving, setSaving] = useState(false)
   const [savingLib, setSavingLib] = useState(false)
@@ -319,7 +319,7 @@ export function Toolbar({ showOutput, onToggleOutput, showCode, onToggleCode, on
 
       <div className="w-px h-5 bg-[#2a2a3f] mx-1" />
 
-      {/* Run */}
+      {/* Run / Cancel */}
       <button
         onClick={() => runPipeline()}
         disabled={isRunning}
@@ -337,6 +337,15 @@ export function Toolbar({ showOutput, onToggleOutput, showCode, onToggleCode, on
           <><Play size={14} /> Run</>
         )}
       </button>
+      {isRunning && (
+        <button
+          onClick={() => cancelRun()}
+          className="no-drag flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-700 hover:bg-red-600 text-white transition-all duration-150"
+          title="Cancel the running pipeline"
+        >
+          <Square size={14} /> Cancel
+        </button>
+      )}
     </header>
   )
 }

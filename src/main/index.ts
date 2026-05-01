@@ -532,7 +532,27 @@ ipcMain.handle('test-mcp-connection', async (_event, config: McpConfig) => {
   }
 })
 
+// Active run cancellation: stores the reject function for the current run.
+// Cleared in the finally block so stale cancellers never fire against a new run.
+let _activeCancelRun: ((e: Error) => void) | null = null
+
+ipcMain.handle('cancel-run', () => {
+  if (_activeCancelRun) {
+    _activeCancelRun(new Error('__RUN_CANCELLED__'))
+    _activeCancelRun = null
+  }
+})
+
 ipcMain.handle('run-code', async (_event, code: string, input: unknown, uiInputs?: Record<string, unknown>) => {
+  // Per-run cancellation and 120-second hard timeout
+  let cancelFn: ((e: Error) => void) | null = null
+  const cancelPromise = new Promise<never>((_, rej) => {
+    cancelFn = rej
+    _activeCancelRun = rej
+  })
+  const timeoutPromise = new Promise<never>((_, rej) =>
+    setTimeout(() => rej(new Error('Pipeline timed out after 120 seconds')), 120_000),
+  )
   try {
     const sandbox: Record<string, unknown> = {
       inputs: input,
@@ -570,15 +590,22 @@ ipcMain.handle('run-code', async (_event, code: string, input: unknown, uiInputs
       __notifyNode__: (nodeId: string | null) => {
         _event.sender.send('node-running', nodeId)
       },
+      // HTTP fetch available in function nodes (no require() in sandbox)
+      fetch,
       result: undefined,
     }
     const context = vm.createContext(sandbox)
     const script = new vm.Script(`(async () => { ${code} })()`)
-    const promise = script.runInContext(context) as Promise<unknown>
-    sandbox.result = await promise
+    const runPromise = script.runInContext(context) as Promise<unknown>
+    sandbox.result = await Promise.race([runPromise, cancelPromise, timeoutPromise])
     return { success: true, result: sandbox.result }
   } catch (err) {
-    return { success: false, error: (err as Error).message }
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg === '__RUN_CANCELLED__') return { success: false, error: '__RUN_CANCELLED__' }
+    return { success: false, error: msg }
+  } finally {
+    // Only clear if this run's cancel fn is still the active one
+    if (_activeCancelRun === cancelFn) _activeCancelRun = null
   }
 })
 
@@ -846,6 +873,7 @@ async function runScheduledProject(project: FlowProject, nodeId: string) {
         callLLMWithTools(model, prompt, systemPrompt, mcpConfigs),
       getState: (k: string, def: unknown = null) => readStateVar(`${project.id}::${k}`, def),
       setState: (k: string, val: unknown) => writeStateVar(`${project.id}::${k}`, val),
+      fetch,
       result: undefined,
     }
     const context = vm.createContext(sandbox)
