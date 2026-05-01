@@ -311,10 +311,13 @@ function emitNodeBodyLines(
     // Falls back to searching all rawInputs values (for source-ID-keyed multi-input nodes).
     lines.push(`${ind}  const __v = __rawInputs__.value?.response ?? __rawInputs__.value?.result ?? __rawInputs__.value?.content ?? __rawInputs__.value?.value ?? (typeof __rawInputs__.value === 'string' ? __rawInputs__.value : null) ?? Object.values(__rawInputs__).map(_rv => typeof _rv === 'string' ? _rv : (_rv && typeof _rv === 'object' ? (_rv.response ?? _rv.result ?? _rv.content ?? _rv.value ?? _rv.text) : null)).find(Boolean) ?? ''`)
     // alias keys (text, content, data, etc.) point to the same resolved value by default.
-    // __rawInputs__ spread last so actual upstream keys (topic, options, etc.) always win.
-    // NOTE: we do NOT auto-destructure these names — user code may declare their own
-    // variables with the same names, which would cause "already declared" conflicts.
-    lines.push(`${ind}  const inputs = { value: __v, text: __v, content: __v, answer: __v, response: __v, result: __v, data: __v, input: __v, output: __v, query: __v, summary: __v, article: __v, tagline: __v, topic: __v, question: __v, message: __v, ...__rawInputs__, value: (typeof __rawInputs__.value === 'string' ? __rawInputs__.value : __v) }`)
+    // Also spread __rawInputs__.value when it's an object — this makes all fields from the
+    // upstream node's result directly accessible (e.g. inputs.filename from a file upload,
+    // inputs.chunks from a chunker, inputs.files from a multi-file upload).
+    // __rawInputs__ spread after so actual upstream keys always win over aliases.
+    // Final value: __v (resolved string) overrides any 'value' key from spreads.
+    // NOTE: we do NOT auto-destructure — user code may declare its own variables.
+    lines.push(`${ind}  const inputs = { value: __v, text: __v, content: __v, answer: __v, response: __v, result: __v, data: __v, input: __v, output: __v, query: __v, summary: __v, article: __v, tagline: __v, topic: __v, question: __v, message: __v, ...(__rawInputs__.value && typeof __rawInputs__.value === 'object' ? __rawInputs__.value : {}), ...__rawInputs__, value: (typeof __rawInputs__.value === 'string' ? __rawInputs__.value : __v) }`)
   }
   for (const codeLine of nodeCode.split('\n')) {
     lines.push(`${ind}  ${codeLine}`)

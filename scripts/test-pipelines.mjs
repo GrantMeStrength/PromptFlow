@@ -475,6 +475,284 @@ return { __html: '<div>' + bars + '</div>' }`,
       return true
     },
   },
+
+  // ─── Document processing workflows ───────────────────────────────────────────
+
+  {
+    name: 'Doc: file upload → LLM summarise ({{content}} resolves to file text)',
+    nodes: [
+      { id: 'upload', type: 'ui', position: { x: 0, y: 0 }, data: { label: 'Upload Doc', kind: 'ui', uiKind: 'file', uiAccept: '.md,.txt' } },
+      { id: 'llm1', type: 'llm', position: { x: 250, y: 0 }, data: { label: 'Summarise', kind: 'llm', llmPromptTemplate: 'Summarise this document: CONTENT=={{content}}==' } },
+      { id: 'out', type: 'output', position: { x: 500, y: 0 }, data: { label: 'Summary', kind: 'output' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'upload', target: 'llm1' },
+      { id: 'e2', source: 'llm1', target: 'out' },
+    ],
+    uiInputs: { upload: { filename: 'report.md', content: 'This is the document body text.', value: 'This is the document body text.', type: 'text/markdown', size: 31 } },
+    mockLLM: async (_model, prompt) => prompt,
+    expect: (result) => {
+      if (result?.__error) throw new Error(`Pipeline errored: ${result.message}`)
+      const response = result?.response ?? result?.value?.response ?? JSON.stringify(result)
+      if (!response.includes('This is the document body text.')) {
+        throw new Error(`Expected file content in prompt, got: ${response.slice(0, 200)}`)
+      }
+      return true
+    },
+  },
+
+  {
+    name: 'Doc: file upload → LLM with {{filename}} and {{content}} in template',
+    nodes: [
+      { id: 'upload', type: 'ui', position: { x: 0, y: 0 }, data: { label: 'Upload', kind: 'ui', uiKind: 'file' } },
+      { id: 'llm1', type: 'llm', position: { x: 250, y: 0 }, data: { label: 'Analyse', kind: 'llm', llmPromptTemplate: 'FILE={{filename}} BODY={{content}}' } },
+      { id: 'out', type: 'output', position: { x: 500, y: 0 }, data: { label: 'Out', kind: 'output' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'upload', target: 'llm1' },
+      { id: 'e2', source: 'llm1', target: 'out' },
+    ],
+    uiInputs: { upload: { filename: 'contract.pdf', content: 'Contract body here.', value: 'Contract body here.', type: 'application/pdf', size: 100 } },
+    mockLLM: async (_model, prompt) => prompt,
+    expect: (result) => {
+      if (result?.__error) throw new Error(`Pipeline errored: ${result.message}`)
+      const response = result?.response ?? result?.value?.response ?? JSON.stringify(result)
+      if (!response.includes('contract.pdf')) throw new Error(`Expected filename in prompt, got: ${response.slice(0, 200)}`)
+      if (!response.includes('Contract body here.')) throw new Error(`Expected content in prompt, got: ${response.slice(0, 200)}`)
+      return true
+    },
+  },
+
+  {
+    name: 'Doc: file upload → function (access filename, content, size)',
+    nodes: [
+      { id: 'upload', type: 'ui', position: { x: 0, y: 0 }, data: { label: 'Upload', kind: 'ui', uiKind: 'file' } },
+      { id: 'fn1', type: 'function', position: { x: 250, y: 0 }, data: {
+        label: 'Meta',
+        kind: 'function',
+        // Access all three fields from the file upload
+        code: 'return { filename: inputs.filename, wordCount: (inputs.content || "").split(/\\s+/).length, size: inputs.size }',
+      } },
+      { id: 'out', type: 'output', position: { x: 500, y: 0 }, data: { label: 'Out', kind: 'output' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'upload', target: 'fn1' },
+      { id: 'e2', source: 'fn1', target: 'out' },
+    ],
+    uiInputs: { upload: { filename: 'notes.txt', content: 'Hello world from the file', value: 'Hello world from the file', type: 'text/plain', size: 25 } },
+    expect: (result) => {
+      if (result?.__error) throw new Error(`Pipeline errored: ${result.message}`)
+      const fn = result?.filename ?? result?.value?.filename
+      const wc = result?.wordCount ?? result?.value?.wordCount
+      const sz = result?.size ?? result?.value?.size
+      if (fn !== 'notes.txt') throw new Error(`Expected filename 'notes.txt', got: ${JSON.stringify(fn)}`)
+      if (wc !== 5) throw new Error(`Expected wordCount 5, got: ${JSON.stringify(wc)}`)
+      if (sz !== 25) throw new Error(`Expected size 25, got: ${JSON.stringify(sz)}`)
+      return true
+    },
+  },
+
+  {
+    name: 'Doc: file upload → chunker → function (filter short chunks)',
+    nodes: [
+      { id: 'upload', type: 'ui', position: { x: 0, y: 0 }, data: { label: 'Upload', kind: 'ui', uiKind: 'file' } },
+      { id: 'chunk', type: 'chunker', position: { x: 200, y: 0 }, data: { label: 'Split', kind: 'chunker', chunkerStrategy: 'paragraph', chunkerSize: 40, chunkerOverlap: 0 } },
+      { id: 'fn1', type: 'function', position: { x: 400, y: 0 }, data: {
+        label: 'Filter',
+        kind: 'function',
+        code: 'const chunks = inputs.chunks || []; return { filtered: chunks.filter(c => c.length > 10), total: chunks.length }',
+      } },
+      { id: 'out', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Out', kind: 'output' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'upload', target: 'chunk' },
+      { id: 'e2', source: 'chunk', target: 'fn1' },
+      { id: 'e3', source: 'fn1', target: 'out' },
+    ],
+    // Long paragraphs (>40 chars) force each to be its own chunk; "Short." stays isolated and gets filtered
+    uiInputs: { upload: { filename: 'doc.txt', content: 'This is a longer first paragraph content.\n\nShort.\n\nThis is a longer third paragraph content.', value: 'This is a longer first paragraph content.\n\nShort.\n\nThis is a longer third paragraph content.', type: 'text/plain', size: 91 } },
+    expect: (result) => {
+      if (result?.__error) throw new Error(`Pipeline errored: ${result.message}`)
+      const filtered = result?.filtered ?? result?.value?.filtered
+      const total = result?.total ?? result?.value?.total
+      if (!Array.isArray(filtered)) throw new Error(`Expected filtered array, got: ${JSON.stringify(result)}`)
+      if (filtered.length >= total) throw new Error(`Expected filtering to remove at least one chunk; total=${total}, filtered=${filtered.length}`)
+      return true
+    },
+  },
+
+  {
+    name: 'Doc: file upload → LLM (extract JSON) → function (parse entities)',
+    nodes: [
+      { id: 'upload', type: 'ui', position: { x: 0, y: 0 }, data: { label: 'Upload', kind: 'ui', uiKind: 'file' } },
+      { id: 'llm1', type: 'llm', position: { x: 250, y: 0 }, data: { label: 'Extract', kind: 'llm', llmPromptTemplate: 'Extract entities from: {{content}}' } },
+      { id: 'fn1', type: 'function', position: { x: 500, y: 0 }, data: {
+        label: 'Parse',
+        kind: 'function',
+        code: 'let parsed; try { parsed = JSON.parse(inputs.value) } catch { parsed = null }; return { entities: parsed?.entities ?? [], raw: inputs.value }',
+      } },
+      { id: 'out', type: 'output', position: { x: 750, y: 0 }, data: { label: 'Out', kind: 'output' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'upload', target: 'llm1' },
+      { id: 'e2', source: 'llm1', target: 'fn1' },
+      { id: 'e3', source: 'fn1', target: 'out' },
+    ],
+    uiInputs: { upload: { filename: 'doc.txt', content: 'Acme Corp signed with GlobalTech.', value: 'Acme Corp signed with GlobalTech.', type: 'text/plain', size: 33 } },
+    // LLM returns structured JSON
+    mockLLM: async () => JSON.stringify({ entities: ['Acme Corp', 'GlobalTech'] }),
+    expect: (result) => {
+      if (result?.__error) throw new Error(`Pipeline errored: ${result.message}`)
+      const entities = result?.entities ?? result?.value?.entities
+      if (!Array.isArray(entities) || entities.length !== 2) {
+        throw new Error(`Expected 2 entities, got: ${JSON.stringify(result)}`)
+      }
+      return true
+    },
+  },
+
+  {
+    name: 'Doc: two files → LLM comparison (both contents resolve correctly)',
+    nodes: [
+      { id: 'doc1', type: 'ui', position: { x: 0, y: 0 }, data: { label: 'Doc A', kind: 'ui', uiKind: 'file' } },
+      { id: 'doc2', type: 'ui', position: { x: 0, y: 150 }, data: { label: 'Doc B', kind: 'ui', uiKind: 'file' } },
+      { id: 'llm1', type: 'llm', position: { x: 250, y: 75 }, data: { label: 'Compare', kind: 'llm', llmPromptTemplate: 'Compare: DOC_A={{doc1}} DOC_B={{doc2}}' } },
+      { id: 'out', type: 'output', position: { x: 500, y: 75 }, data: { label: 'Out', kind: 'output' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'doc1', target: 'llm1' },
+      { id: 'e2', source: 'doc2', target: 'llm1' },
+      { id: 'e3', source: 'llm1', target: 'out' },
+    ],
+    uiInputs: {
+      doc1: { filename: 'a.txt', content: 'ALPHA_CONTENT', value: 'ALPHA_CONTENT', type: 'text/plain', size: 13 },
+      doc2: { filename: 'b.txt', content: 'BETA_CONTENT', value: 'BETA_CONTENT', type: 'text/plain', size: 12 },
+    },
+    mockLLM: async (_model, prompt) => prompt,
+    expect: (result) => {
+      if (result?.__error) throw new Error(`Pipeline errored: ${result.message}`)
+      const response = result?.response ?? result?.value?.response ?? JSON.stringify(result)
+      if (!response.includes('ALPHA_CONTENT')) throw new Error(`Expected ALPHA_CONTENT in prompt, got: ${response.slice(0, 300)}`)
+      if (!response.includes('BETA_CONTENT')) throw new Error(`Expected BETA_CONTENT in prompt, got: ${response.slice(0, 300)}`)
+      return true
+    },
+  },
+
+  {
+    name: 'Doc: file upload → decision (route by file type) → correct branch runs',
+    nodes: [
+      { id: 'upload', type: 'ui', position: { x: 0, y: 0 }, data: { label: 'Upload', kind: 'ui', uiKind: 'file' } },
+      { id: 'dec', type: 'decision', position: { x: 200, y: 0 }, data: {
+        label: 'Is PDF?', kind: 'decision', branches: ['true', 'false'],
+        code: `const t = inputs.type || ''; const isPDF = t.includes('pdf'); return isPDF ? { true: inputs.value, false: null } : { true: null, false: inputs.value }`,
+      } },
+      { id: 'pdfFn', type: 'function', position: { x: 400, y: 0 }, data: { label: 'PDF handler', kind: 'function', code: 'return { result: "handled-as-pdf" }' } },
+      { id: 'txtFn', type: 'function', position: { x: 400, y: 150 }, data: { label: 'Text handler', kind: 'function', code: 'return { result: "handled-as-text" }' } },
+      { id: 'out', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Out', kind: 'output' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'upload', target: 'dec' },
+      { id: 'e2', source: 'dec', target: 'pdfFn', sourceHandle: 'true' },
+      { id: 'e3', source: 'dec', target: 'txtFn', sourceHandle: 'false' },
+      { id: 'e4', source: 'pdfFn', target: 'out' },
+    ],
+    uiInputs: { upload: { filename: 'contract.pdf', content: 'PDF text content', value: 'PDF text content', type: 'application/pdf', size: 100 } },
+    expect: (result, trace) => {
+      // PDF handler should run
+      const pdfEntry = trace.find(t => t.id === 'pdfFn')
+      if (pdfEntry?.error) throw new Error(`PDF handler should succeed, got: ${pdfEntry.error}`)
+      // Text handler should be skipped
+      const txtEntry = trace.find(t => t.id === 'txtFn')
+      if (!txtEntry?.error?.includes('Skipped')) throw new Error(`Text handler should be skipped, got: ${JSON.stringify(txtEntry)}`)
+      return true
+    },
+  },
+
+  {
+    name: 'Doc: multi-file upload → function processes files array',
+    nodes: [
+      { id: 'upload', type: 'ui', position: { x: 0, y: 0 }, data: { label: 'Upload Files', kind: 'ui', uiKind: 'file', uiMultiple: true } },
+      { id: 'fn1', type: 'function', position: { x: 250, y: 0 }, data: {
+        label: 'Combine',
+        kind: 'function',
+        code: 'const files = inputs.files || []; return { names: files.map(f => f.filename), count: files.length }',
+      } },
+      { id: 'out', type: 'output', position: { x: 500, y: 0 }, data: { label: 'Out', kind: 'output' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'upload', target: 'fn1' },
+      { id: 'e2', source: 'fn1', target: 'out' },
+    ],
+    uiInputs: { upload: { files: [
+      { filename: 'a.txt', content: 'File A content', value: 'File A content', type: 'text/plain', size: 14 },
+      { filename: 'b.txt', content: 'File B content', value: 'File B content', type: 'text/plain', size: 14 },
+    ] } },
+    expect: (result) => {
+      if (result?.__error) throw new Error(`Pipeline errored: ${result.message}`)
+      const count = result?.count ?? result?.value?.count
+      const names = result?.names ?? result?.value?.names
+      if (count !== 2) throw new Error(`Expected 2 files, got count=${JSON.stringify(count)}`)
+      if (!Array.isArray(names) || !names.includes('a.txt')) throw new Error(`Expected names including a.txt, got: ${JSON.stringify(names)}`)
+      return true
+    },
+  },
+
+  {
+    name: 'Doc: file upload → judge (assess document quality)',
+    nodes: [
+      { id: 'upload', type: 'ui', position: { x: 0, y: 0 }, data: { label: 'Upload', kind: 'ui', uiKind: 'file' } },
+      { id: 'criteria', type: 'ui', position: { x: 0, y: 150 }, data: { label: 'Criteria', kind: 'ui', uiKind: 'text' } },
+      { id: 'judge1', type: 'judge', position: { x: 300, y: 75 }, data: { label: 'Quality Check', kind: 'judge' } },
+      { id: 'out', type: 'output', position: { x: 550, y: 75 }, data: { label: 'Out', kind: 'output' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'upload', target: 'judge1' },
+      { id: 'e2', source: 'criteria', target: 'judge1' },
+      { id: 'e3', source: 'judge1', target: 'out' },
+    ],
+    uiInputs: {
+      upload: { filename: 'report.md', content: 'This is a well-written report with good structure.', value: 'This is a well-written report with good structure.', type: 'text/markdown', size: 50 },
+      criteria: { value: 'Must be clear and professional.' },
+    },
+    expect: (result) => {
+      if (result?.__error) throw new Error(`Pipeline errored: ${result.message}`)
+      const verdict = result?.verdict ?? result?.value?.verdict
+      if (!verdict) throw new Error(`Expected judge verdict, got: ${JSON.stringify(result)}`)
+      return true
+    },
+  },
+
+  {
+    name: 'Doc: file → LLM (classify) → decision → route to handler',
+    nodes: [
+      { id: 'upload', type: 'ui', position: { x: 0, y: 0 }, data: { label: 'Upload', kind: 'ui', uiKind: 'file' } },
+      { id: 'llm1', type: 'llm', position: { x: 200, y: 0 }, data: { label: 'Classify', kind: 'llm', llmPromptTemplate: 'Classify: {{content}}' } },
+      { id: 'dec', type: 'decision', position: { x: 400, y: 0 }, data: {
+        label: 'Is Contract?', kind: 'decision', branches: ['true', 'false'],
+        code: `const cls = inputs.value || ''; return cls.includes('contract') ? { true: cls, false: null } : { true: null, false: cls }`,
+      } },
+      { id: 'contractFn', type: 'function', position: { x: 600, y: 0 }, data: { label: 'Contract', kind: 'function', code: 'return { docType: "contract" }' } },
+      { id: 'genericFn', type: 'function', position: { x: 600, y: 150 }, data: { label: 'Generic', kind: 'function', code: 'return { docType: "generic" }' } },
+      { id: 'out', type: 'output', position: { x: 800, y: 0 }, data: { label: 'Out', kind: 'output' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'upload', target: 'llm1' },
+      { id: 'e2', source: 'llm1', target: 'dec' },
+      { id: 'e3', source: 'dec', target: 'contractFn', sourceHandle: 'true' },
+      { id: 'e4', source: 'dec', target: 'genericFn', sourceHandle: 'false' },
+      { id: 'e5', source: 'contractFn', target: 'out' },
+    ],
+    uiInputs: { upload: { filename: 'agreement.txt', content: 'Service agreement terms.', value: 'Service agreement terms.', type: 'text/plain', size: 24 } },
+    // LLM classifies as contract
+    mockLLM: async () => 'this is a contract document',
+    expect: (result, trace) => {
+      const contractEntry = trace.find(t => t.id === 'contractFn')
+      if (contractEntry?.error) throw new Error(`Contract handler should succeed: ${contractEntry.error}`)
+      const genericEntry = trace.find(t => t.id === 'genericFn')
+      if (!genericEntry?.error?.includes('Skipped')) throw new Error(`Generic handler should be skipped: ${JSON.stringify(genericEntry)}`)
+      return true
+    },
+  },
 ]
 // ─── Runner ───────────────────────────────────────────────────────────────────
 
@@ -489,8 +767,9 @@ let failed = 0
 console.log('\n\x1b[1mPromptFlow Pipeline Tests\x1b[0m\n')
 
 for (const test of TESTS) {
+  let code = ''
   try {
-    const code = generateCode(test.nodes, test.edges)
+    code = generateCode(test.nodes, test.edges)
     const sandbox = test.buildSandbox ? test.buildSandbox(test.uiInputs) : buildSandbox(test.uiInputs)
     if (test.mockLLM) {
       sandbox.callLLM = test.mockLLM
@@ -508,6 +787,7 @@ for (const test of TESTS) {
   } catch (err) {
     console.log(`${FAIL} ${test.name}`)
     console.log(`  ${DIM}${err.message}${RESET}`)
+    if (process.env.DEBUG_TESTS) console.log(`${DIM}--- Generated code ---\n${code}\n---${RESET}`)
     failed++
   }
 }
