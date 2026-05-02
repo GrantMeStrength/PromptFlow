@@ -11,7 +11,7 @@ import { generateCode } from '../dist/shared/generator.js'
 
 // ─── Mock runtime dependencies ────────────────────────────────────────────────
 
-const mockLLMResponse = async (_model, prompt) => {
+export const mockLLMResponse = async (_model, prompt) => {
   // Return plausible JSON or text depending on prompt content
   if (prompt.includes('JSON') || prompt.includes('json') || prompt.includes('percentage')) {
     return JSON.stringify([{ label: 'Option A', value: 60 }, { label: 'Option B', value: 40 }])
@@ -22,14 +22,14 @@ const mockLLMResponse = async (_model, prompt) => {
   return 'Mock LLM response.'
 }
 
-const mockFetch = async (url) => ({
+export const mockFetch = async (url) => ({
   ok: true,
   status: 200,
   text: async () => `mock content from ${url}`,
   json: async () => ({ url, mock: true }),
 })
 
-function buildSandbox(uiInputs = {}) {
+export function buildSandbox(uiInputs = {}) {
   return {
     inputs: {},
     __uiInputs__: uiInputs,
@@ -58,7 +58,7 @@ async function runCode(code, uiInputs = {}) {
 
 // ─── Test scenarios ───────────────────────────────────────────────────────────
 
-const TESTS = [
+export const TESTS = [
   {
     name: 'Simple: UI → LLM → Output',
     nodes: [
@@ -751,6 +751,39 @@ return { __html: '<div>' + bars + '</div>' }`,
       const genericEntry = trace.find(t => t.id === 'genericFn')
       if (!genericEntry?.error?.includes('Skipped')) throw new Error(`Generic handler should be skipped: ${JSON.stringify(genericEntry)}`)
       return true
+    },
+  },
+
+  // ── Input node: runs its code with uiInputs (Document Analyser pattern) ──────
+  {
+    name: 'Input node: runs code with uiInputs, fan-out to function nodes',
+    uiInputs: {},
+    nodes: [
+      { id: 'n-input', type: 'input', position: { x: 0, y: 0 }, data: {
+        label: 'Doc Input', kind: 'input',
+        code: "return { text: inputs.text ?? '' }",
+        inputs: [], outputs: [{ name: 'text', type: 'string' }],
+      }},
+      { id: 'n-wordcount', type: 'function', position: { x: 200, y: 0 }, data: {
+        label: 'Word Count', kind: 'function',
+        code: "const words = inputs.text.match(/\\b\\w+\\b/g) || []; return { count: words.length }",
+        inputs: [{ name: 'text', type: 'string' }], outputs: [{ name: 'count', type: 'number' }],
+      }},
+      { id: 'n-output', type: 'output', position: { x: 400, y: 0 }, data: {
+        label: 'Report', kind: 'output',
+        code: 'return { count: inputs.count, ok: true }',
+        inputs: [{ name: 'count', type: 'number' }], outputs: [],
+      }},
+    ],
+    edges: [
+      { id: 'e1', source: 'n-input', target: 'n-wordcount', sourceHandle: 'text', targetHandle: 'text', animated: true },
+      { id: 'e2', source: 'n-wordcount', target: 'n-output', sourceHandle: 'count', targetHandle: 'count', animated: true },
+    ],
+    expect: (result, trace) => {
+      // Input node returned { text: '' }, function got text='', count=0
+      const wordEntry = trace.find(t => t.id === 'n-wordcount')
+      if (wordEntry?.error) throw new Error(`Word count failed: ${wordEntry.error}`)
+      if (result?.count !== 0) throw new Error(`Expected count=0 (empty text), got ${result?.count}`)
     },
   },
 ]

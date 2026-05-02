@@ -155,6 +155,7 @@ export interface ElectronAPI {
   saveProject: (project: FlowProject) => Promise<{ success: boolean; path?: string; error?: string }>
   loadProject: () => Promise<{ success: boolean; project?: FlowProject; error?: string }>
   runCode: (code: string, input: unknown, uiInputs?: Record<string, unknown>) => Promise<{ success: boolean; result?: unknown; error?: string }>
+  runPipeline: (nodes: FlowNode[], edges: FlowEdge[], uiInputs?: Record<string, unknown>) => Promise<{ success: boolean; result?: unknown; error?: string }>
   cancelRun: () => Promise<void>
   callLLM: (prompt: string, systemPrompt?: string) => Promise<{ success: boolean; result?: string; error?: string }>
   callLLMChat: (messages: ChatMessage[], systemPrompt?: string) => Promise<{ success: boolean; result?: string; error?: string }>

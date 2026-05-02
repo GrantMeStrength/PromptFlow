@@ -6,6 +6,7 @@ import vm from 'vm'
 import { spawn, ChildProcess } from 'child_process'
 import * as nodeCron from 'node-cron'
 import { generateCode } from '../shared/generator'
+import { runPipeline } from '../shared/executor'
 import type { FlowProject, FlowNode, FlowEdge, ScheduleStatus, ScheduleRunEntry } from '../renderer/src/types'
 
 // ─── MCP Stdio Client ─────────────────────────────────────────────────────────
@@ -609,7 +610,42 @@ ipcMain.handle('run-code', async (_event, code: string, input: unknown, uiInputs
   }
 })
 
-// ─── State Variable Storage ───────────────────────────────────────────────────
+// ─── Executor: Direct Graph Interpreter ──────────────────────────────────────
+
+ipcMain.handle('run-pipeline', async (_event, nodes: FlowNode[], edges: FlowEdge[], uiInputs?: Record<string, unknown>) => {
+  let cancelFn: ((e: Error) => void) | null = null
+  const cancelPromise = new Promise<never>((_, rej) => {
+    cancelFn = rej
+    _activeCancelRun = rej
+  })
+  const timeoutPromise = new Promise<never>((_, rej) =>
+    setTimeout(() => rej(new Error('Pipeline timed out after 120 seconds')), 120_000),
+  )
+  try {
+    const ctx = {
+      uiInputs: uiInputs ?? {},
+      callLLM: (model: string, prompt: string, systemPrompt?: string, responseFormat?: unknown) =>
+        callLLM(model, prompt, systemPrompt, responseFormat as Record<string, unknown> | undefined),
+      callLLMWithTools: (model: string, prompt: string, systemPrompt?: string, mcpConfigs?: McpConfig[]) =>
+        callLLMWithTools(model, prompt, systemPrompt, mcpConfigs ?? []),
+      getState: (key: string, defaultValue: unknown = null) => readStateVar(key, defaultValue),
+      setState: (key: string, value: unknown) => writeStateVar(key, value),
+      notifyNode: (nodeId: string | null) => { _event.sender.send('node-running', nodeId) },
+      fetch,
+    }
+    const runPromise = runPipeline(nodes, edges, ctx)
+    const result = await Promise.race([runPromise, cancelPromise, timeoutPromise])
+    return { success: true, result }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg === '__RUN_CANCELLED__') return { success: false, error: '__RUN_CANCELLED__' }
+    return { success: false, error: msg }
+  } finally {
+    if (_activeCancelRun === cancelFn) _activeCancelRun = null
+  }
+})
+
+
 
 function getStatePath(): string {
   return path.join(app.getPath('userData'), 'promptflow-state.json')

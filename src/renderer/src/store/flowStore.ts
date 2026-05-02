@@ -416,11 +416,10 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     }
 
     try {
-      const code = generateCode(nodes, edges)
       let result: unknown
 
       if (api) {
-        const res = await api.runCode(code, {}, uiInputs)
+        const res = await api.runPipeline(nodes, edges, uiInputs)
         if (!res.success) {
           if (res.error === '__RUN_CANCELLED__') {
             unsubNodeRunning?.()
@@ -432,7 +431,8 @@ export const useFlowStore = create<FlowState>((set, get) => ({
         }
         result = res.result
       } else {
-        // Browser fallback: run in eval (dev only) with in-memory state store
+        // Browser fallback: code-gen + eval (dev only, no Node.js vm available)
+        const code = generateCode(nodes, edges)
         const browserState: Record<string, unknown> = {}
         const getState = async (key: string, def: unknown = null) => browserState[key] ?? def
         const setState = async (key: string, val: unknown) => { browserState[key] = val }

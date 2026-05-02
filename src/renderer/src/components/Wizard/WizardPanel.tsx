@@ -44,78 +44,174 @@ NODE SCHEMA:
   }
 }
 
-NODE KINDS AND THEIR DATA FIELDS:
+═══════════════════════════════════════════
+NODE KINDS
+═══════════════════════════════════════════
 
-"ui" — RUNTIME user input. A dialog appears when the workflow runs asking the user to type/choose/upload.
-  ALWAYS use "ui" (NOT "input") when the user needs to provide a value each time the workflow runs.
-  Extra data fields:
-    "uiKind": "text" | "choice" | "file"   (default "text")
-    "uiLabel": "Prompt shown to user"
-    "uiPlaceholder": "Placeholder text"     (for text inputs)
-    "uiChoices": "Option A,Option B"        (for choice inputs, comma-separated)
-    "uiAccept": ".txt,.md,.pdf"             (for file inputs)
+── "ui" ─────────────────────────────────
+RUNTIME user input. A dialog appears at runtime asking the user to type/choose/upload.
+ALWAYS use "ui" (NOT "input") when the user needs to provide a value each time the workflow runs.
+Extra data fields:
+  "uiKind": "text" | "choice" | "file"   (default "text")
+  "uiLabel": "Prompt shown to user"
+  "uiPlaceholder": "Placeholder text"              (text only)
+  "uiOptions": ["Option A", "Option B", "Option C"] (choice only — ARRAY of strings, not comma string)
+  "uiAccept": ".txt,.md,.pdf"                      (file only)
+  "uiMultiple": true                               (file only — allows selecting multiple files)
 
-"input" — STATIC value baked into the workflow at design time. Does NOT prompt the user at runtime.
-  Use only for fixed/hardcoded values.
-  Extra data fields:
-    "value": "the hardcoded text"
+UI NODE OUTPUT SHAPES (what downstream nodes receive):
+  Text   → { value: "the typed text" }
+  Choice → { choice: "selected label", index: 0 }
+  File (single) → { filename: "doc.pdf", content: "full text content", value: "full text content", type: "application/pdf", size: 12345 }
+  File (multiple, uiMultiple:true) → { files: [{ filename, content, value, type, size }, ...] }
+  When wiring a text-ui downstream: use sourceHandle "value" to get the string.
+  When wiring a file-ui downstream: use sourceHandle "content" or "value" to get the file text.
 
-"llm" — Calls an LLM with a prompt template. Use {{variableName}} for inputs from upstream nodes.
-  Extra data fields:
-    "llmPromptTemplate": "Write an article about {{topic}}."
-    "llmModel": ""   (leave blank for default)
+── "input" ──────────────────────────────
+STATIC value baked into the workflow. Does NOT prompt the user at runtime.
+Use only for fixed/hardcoded values.
+Extra data fields:
+  "value": "the hardcoded text"
 
-"output" — Final result displayed to the user. Usually the last node.
+── "llm" ────────────────────────────────
+Calls an LLM with a prompt template. Use {{variableName}} for upstream values.
+Extra data fields:
+  "llmPromptTemplate": "Write an article about {{topic}}."
+  "llmModel": ""                (leave blank for default gpt-4o-mini; or specify e.g. "gpt-4o")
+  "llmProvider": "default"      (optional: "default" | "ollama" | "anthropic")
+  "llmJsonMode": true           (optional: force JSON output — model returns parseable JSON only)
+  "llmStructuredSchema": "{}"   (optional: JSON Schema string for structured output)
+Output: the LLM response string (access downstream as inputs.value or inputs.response)
 
-"function" — Runs JavaScript code to transform data.
-  Extra data fields:
-    "code": "return { result: inputs.value.toUpperCase() }"
-  IMPORTANT: The primary incoming value always arrives at inputs.value. NEVER reference invented keys
-  like inputs.answer or inputs.text — always use inputs.value (or check it exists first).
-  If inputs.value is an object, extract its content as: inputs.value?.response ?? inputs.value?.value ?? String(inputs.value)
+── "output" ─────────────────────────────
+Final result displayed to the user. Usually the last node.
+Default behaviour: renders the upstream value as JSON or markdown.
+If upstream returns { __html: "<div>...</div>" }, the panel renders it as HTML directly.
 
-"judge" — Uses an LLM to evaluate content against criteria. Returns score (0-10), verdict, and reasoning.
-  Use for quality gates, CV scoring, content moderation, answer grading, etc.
-  The generator handles the LLM call automatically — DO NOT write any code for judge nodes.
-  Extra data fields:
-    "llmModel": ""   (leave blank for default)
-  Input keys used at runtime:
-    inputs.content  — the text/content to evaluate
-    inputs.criteria — the rubric or requirements to evaluate against
-  Output keys: { score: number, verdict: "pass"|"fail"|"review", reasoning: string }
-  TIP: Wire the content to evaluate into the "content" input edge, and criteria into the "criteria" input edge.
-  In the orchestrator, pass named keys: { "content": results["llm_extract"]?.["response"] ?? ..., "criteria": results["ui_requirements"]?.["value"] ?? ... }
+── "function" ───────────────────────────
+Runs JavaScript code to transform data.
+Extra data fields:
+  "code": "return { result: inputs.value.toUpperCase() }"
 
-"decision" — Routes flow based on a condition. Produces true/false branches.
+INPUT ACCESS IN FUNCTION CODE:
+  • Single upstream, no named ports → access as inputs.value (default key when no targetHandle is set)
+  • Named ports → set targetHandle on the incoming edge; access as inputs.<portname>
+    Example: edge with targetHandle "topic" → inputs.topic in the function code
+  • File upload upstream → inputs.content or inputs.value both hold the full file text
 
-"pipe" — Passes data through unchanged, optionally renaming fields.
+VISUALISATION — return { __html: "<html>" } to render HTML/charts/tables in the output panel:
+  Use inline styles ONLY (no external CSS). Single-quoted HTML/CSS attributes avoid JSON escaping issues.
+  HTML div bar chart skeleton (adapt as needed — uses template literals for clean JSON embedding):
+    const items = JSON.parse(inputs.value)
+    const max = Math.max(...items.map(d => d.value), 1)
+    const rows = items.map(d => {
+      const pct = Math.round(d.value / max * 100)
+      return \`<div style='display:flex;align-items:center;gap:8px;margin:4px 0'>
+        <span style='width:100px;text-align:right;color:#94a3b8;font-size:13px'>\${d.label}</span>
+        <div style='height:24px;width:\${pct}%;background:#a855f7;border-radius:4px;min-width:4px'></div>
+        <span style='color:#e2e8f0;font-size:13px'>\${d.value}</span>
+      </div>\`
+    }).join('')
+    return { __html: \`<div style='padding:16px;font-family:sans-serif'>\${rows}</div>\` }
+  TIP: __html can be ANY HTML — tables, cards, styled reports, SVG, etc. Not just bar charts.
+  TIP: Use template literals (backtick strings) in code fields — they embed cleanly in JSON with no quote escaping.
 
-"state" — Reads or writes persisted key-value state across runs.
-  Extra data fields:
-    "stateMode": "read" | "write"
-    "stateKey": "myKey"
+── "judge" ──────────────────────────────
+Uses an LLM to evaluate content against criteria.
+Returns: { score: 0–10, verdict: "pass"|"fail"|"review", reasoning: string }
+Use for: quality gates, CV scoring, content grading, moderation.
+DO NOT write code — the runtime handles the LLM call automatically.
+Extra data fields:
+  "llmModel": ""   (leave blank for default)
 
-EDGE SCHEMA:
-{ "id": "e1", "source": "node-id", "target": "node-id" }
-NEVER add sourceHandle or targetHandle to edges - omit those fields entirely.
+INPUT ROUTING — how judge determines content vs criteria:
+  • Edges from "ui" or "input" nodes → treated as CRITERIA (the rubric)
+  • Edges from all other node kinds (llm, function, etc.) → treated as CONTENT (what to evaluate)
+  Wire accordingly: content source → judge, criteria source → judge.
 
-LAYOUT GUIDELINES:
-- Use x: 100-1200, y: 100-600 with ~200px spacing between connected nodes
-- Left to right flow generally
+── "decision" ───────────────────────────
+Routes flow based on a boolean condition. Produces true/false branches.
+Extra data fields:
+  "code": "return inputs.value > 5 ? { true: inputs.value, false: null } : { true: null, false: inputs.value }"
+Edges FROM a decision node MUST include "sourceHandle": "true" or "sourceHandle": "false".
 
-YOUR BEHAVIOUR:
-1. Ask 1-2 clarifying questions only if the request is genuinely ambiguous.
+── "pipe" ───────────────────────────────
+Passes data through, optionally renaming or reshaping fields.
+Extra data fields:
+  "code": "return { text: inputs.value }"   (optional transformation)
+
+── "state" ──────────────────────────────
+Reads or writes persisted key-value state across workflow runs.
+Extra data fields:
+  "stateMode": "read" | "write"
+  "stateKey": "myKey"
+  "stateDefault": "null"   (JSON-serialisable default for read mode, e.g. "[]" or "0")
+State-read nodes are self-sourcing — they need no incoming edge.
+
+── "chunker" ────────────────────────────
+Splits a large text into overlapping chunks for processing by downstream LLM/function nodes.
+Output: { chunks: string[], count: number, text: string }
+Extra data fields:
+  "chunkerStrategy": "paragraph" | "sentence" | "fixed"   (default "paragraph")
+  "chunkerSize": 500        (max chars per chunk)
+  "chunkerOverlap": 50      (overlap chars between chunks for context continuity)
+Use for: document Q&A, summarisation of long texts, RAG pipelines.
+
+── "systemprompt" ───────────────────────
+Injects a static system prompt into a downstream LLM or judge node.
+Connect this node to an LLM/judge node; it overrides that node's system instructions.
+Extra data fields:
+  "systemPromptContent": "You are a helpful assistant specialising in legal documents."
+
+── "note" ───────────────────────────────
+Decorative annotation only. No data flow. Use for labelling sections of the graph.
+Extra data fields:
+  "noteText": "Explanation of this part of the workflow"
+
+═══════════════════════════════════════════
+EDGE SCHEMA
+═══════════════════════════════════════════
+
+Basic edge (no named ports):
+  { "id": "e1", "source": "node-id", "target": "node-id" }
+
+Named port edge (use when targeting a specific field):
+  { "id": "e2", "source": "node-a", "target": "node-b", "sourceHandle": "value", "targetHandle": "topic" }
+
+When to use sourceHandle / targetHandle:
+  • OMIT both for simple single-upstream connections — the value arrives as inputs.value
+  • USE sourceHandle when the upstream node outputs multiple named keys (e.g. "content", "keywords", "stats") and you want a specific one
+  • USE targetHandle when the downstream function accesses inputs by name (e.g. inputs.topic, inputs.criteria)
+  • Decision nodes: outgoing edges MUST have sourceHandle "true" or "false"
+  • File UI → function: use sourceHandle "content" or "value" to get the file text string
+  • Judge node: wiring automatically routes by source kind — no special handles needed
+  • __html output chain: use sourceHandle "__html", targetHandle "__html"
+
+═══════════════════════════════════════════
+LAYOUT GUIDELINES
+═══════════════════════════════════════════
+- x: 100–1400, y: 100–700; ~220px horizontal spacing, ~120px vertical spacing
+- Left-to-right flow; parallel branches stagger vertically
+
+═══════════════════════════════════════════
+YOUR BEHAVIOUR
+═══════════════════════════════════════════
+1. Ask 1–2 clarifying questions only if the request is genuinely ambiguous.
 2. Once you have enough info, produce the workflow as a JSON code block.
 3. Wrap JSON in: \`\`\`json ... \`\`\`
 4. The JSON must be: { "nodes": [...], "edges": [...] }
-5. Keep node counts reasonable (3-8 nodes).
+5. Keep node counts reasonable (3–10 nodes).
 6. For LLM nodes, always write a meaningful llmPromptTemplate using {{variable}} placeholders.
 7. ALWAYS use "ui" nodes (not "input") for any value the user should provide at runtime.
-8. FUNCTION NODE CODE RULES — the sandbox has NO require()/import. Available globals: fetch (async HTTP), JSON, Math, Date, Array, Object, String, Number, RegExp, Set, Map, Promise, callLLM, getState, setState, encodeURIComponent, decodeURIComponent.
-   - For file upload inputs: the file content is already in inputs.content (string) — do NOT try to read a path.
+8. FUNCTION NODE CODE RULES:
+   - The sandbox has NO require()/import. Available globals: fetch (async HTTP), JSON, Math, Date,
+     Array, Object, String, Number, RegExp, Set, Map, Promise, callLLM, getState, setState,
+     encodeURIComponent, decodeURIComponent.
+   - For file upload inputs: the file content is in inputs.content or inputs.value — do NOT read a path.
    - For HTTP requests: use "const r = await fetch(url); const text = await r.text()" — always async/await.
    - Never call require(), fs, path, or any Node.js module.
-   - Never use synchronous HTTP (sync-request, XMLHttpRequest).`
+   - In code fields, prefer template literals (backtick strings) and single-quoted CSS attributes to
+     avoid JSON escaping conflicts with double quotes.`
 
 const ANALYSIS_SYSTEM_PROMPT = `You are a PromptFlow workflow analyst. You will be given a description of a visual node-graph workflow and must analyse it for potential issues.
 
@@ -237,8 +333,8 @@ function extractGraph(text: string): { ok: true; graph: { nodes: FlowNode[]; edg
   if (!match) return null
   let parsed: unknown
   try {
-    // Strip trailing commas (common LLM JSON mistake) before parsing
-    const cleaned = match[1].replace(/,(\s*[}\]])/g, '$1')
+    // Strip trailing commas then fix literal control chars inside strings
+    const cleaned = repairJsonControlChars(match[1].replace(/,(\s*[}\]])/g, '$1'))
     parsed = JSON.parse(cleaned)
   } catch (e) {
     return { ok: false, error: `Could not parse JSON from response: ${e instanceof Error ? e.message : String(e)}` }
@@ -246,13 +342,64 @@ function extractGraph(text: string): { ok: true; graph: { nodes: FlowNode[]; edg
   return validateGraph(parsed)
 }
 
+/**
+ * Escape literal control characters (newlines, tabs, etc.) that appear inside
+ * JSON string values. LLMs sometimes emit unescaped newlines in code fields,
+ * which JSON.parse rejects as "Bad control character in string literal".
+ */
+function repairJsonControlChars(json: string): string {
+  let out = ''
+  let inString = false
+  let escaped = false
+  for (let i = 0; i < json.length; i++) {
+    const ch = json[i]
+    if (escaped) {
+      out += ch
+      escaped = false
+      continue
+    }
+    if (ch === '\\' && inString) {
+      out += ch
+      escaped = true
+      continue
+    }
+    if (ch === '"') {
+      inString = !inString
+      out += ch
+      continue
+    }
+    if (inString) {
+      const code = ch.charCodeAt(0)
+      if (code === 0x0A) { out += '\\n'; continue }
+      if (code === 0x0D) { out += '\\r'; continue }
+      if (code === 0x09) { out += '\\t'; continue }
+      if (code < 0x20) { out += `\\u${code.toString(16).padStart(4, '0')}`; continue }
+    }
+    out += ch
+  }
+  return out
+}
+
 // Known safe inputs.* keys that the runtime injects — don't rewrite these.
-const SAFE_INPUT_KEYS = new Set(['value', '__systemPrompt__', '__rawInputs__'])
+// Keys the executor always provides as string aliases — never rewrite these.
+// Includes the full alias set from buildUserCodeInputs + named ui output fields.
+const SAFE_INPUT_KEYS = new Set([
+  'value', 'text', 'content', 'answer', 'response', 'result',
+  'data', 'input', 'output', 'query', 'summary', 'article',
+  'tagline', 'topic', 'question', 'message',
+  'filename', 'type', 'size', 'files', 'choice', 'index',
+  'chunks', 'count', 'stats', 'keywords', 'score', 'verdict', 'reasoning',
+  '__html', '__systemPrompt__', '__rawInputs__',
+])
 
 /**
  * Auto-corrects common wizard hallucinations in the generated graph:
- * 1. Function node code: rewrite inputs.<invented_key> → inputs.value
- * 2. Edges: strip sourceHandle / targetHandle
+ * 1. LLM nodes: replace {{inputs.xxx}} placeholders with {{text}}
+ * 2. Function nodes: rewrite inputs.<invented_key> → inputs.value ONLY when no
+ *    incoming edge uses that key as a targetHandle (named port)
+ * 3. Judge nodes: strip any code field (runtime handles the LLM call)
+ * 4. Decision edges: keep sourceHandle "true"/"false", strip targetHandle
+ * 5. Non-decision edges: preserve sourceHandle/targetHandle (valid named ports)
  * Returns { graph, fixes } where fixes is a human-readable list of changes made.
  */
 function sanitizeGraph(graph: { nodes: FlowNode[]; edges: FlowEdge[] }): {
@@ -273,10 +420,16 @@ function sanitizeGraph(graph: { nodes: FlowNode[]; edges: FlowEdge[] }): {
       if (fixed !== data.llmPromptTemplate) data = { ...data, llmPromptTemplate: fixed }
     }
 
-    // Fix function nodes: rewrite inputs.<invented_key> → inputs.value
+    // Fix function nodes: rewrite inputs.<invented_key> → inputs.value,
+    // but ONLY if no incoming edge uses that key as a targetHandle.
     if (data.kind === 'function' && data.code) {
+      const incomingHandles = new Set<string>(
+        graph.edges
+          .filter(e => e.target === n.id && e.targetHandle)
+          .map(e => e.targetHandle as string),
+      )
       const fixed = data.code.replace(/\binputs\.([a-zA-Z_]\w*)/g, (_match, key) => {
-        if (SAFE_INPUT_KEYS.has(key)) return `inputs.${key}`
+        if (SAFE_INPUT_KEYS.has(key) || incomingHandles.has(key)) return `inputs.${key}`
         fixes.push(`"${data.label}": inputs.${key} → inputs.value`)
         return 'inputs.value'
       })
@@ -285,7 +438,7 @@ function sanitizeGraph(graph: { nodes: FlowNode[]; edges: FlowEdge[] }): {
 
     // Fix judge nodes that have been given code — strip it, they're LLM-driven
     if (data.kind === 'judge' && data.code) {
-      fixes.push(`"${data.label}": removed code from judge node (handled by generator)`)
+      fixes.push(`"${data.label}": removed code from judge node (handled by runtime)`)
       data = { ...data, code: '' }
     }
 
@@ -293,9 +446,25 @@ function sanitizeGraph(graph: { nodes: FlowNode[]; edges: FlowEdge[] }): {
   })
 
   const edges = graph.edges.map((e) => {
-    const { sourceHandle, targetHandle, ...rest } = e as FlowEdge & { sourceHandle?: string; targetHandle?: string }
-    if (sourceHandle || targetHandle) fixes.push(`edge ${e.id}: removed handle overrides`)
-    return rest as FlowEdge
+    const srcNode = nodes.find(n => n.id === e.source)
+    const isDecision = srcNode?.data.kind === 'decision'
+
+    if (isDecision) {
+      // Decision edges must keep sourceHandle "true"/"false" for routing.
+      // Strip any other invalid handle value; always strip targetHandle.
+      const { targetHandle, ...rest } = e as FlowEdge & { targetHandle?: string }
+      if (targetHandle) fixes.push(`edge ${e.id}: removed targetHandle from decision edge`)
+      const src = (rest as FlowEdge & { sourceHandle?: string }).sourceHandle
+      if (src && src !== 'true' && src !== 'false') {
+        const { sourceHandle, ...stripped } = rest as FlowEdge & { sourceHandle?: string }
+        fixes.push(`edge ${e.id}: removed invalid decision sourceHandle "${src}"`)
+        return stripped as FlowEdge
+      }
+      return rest as FlowEdge
+    }
+
+    // Non-decision edges: preserve sourceHandle/targetHandle for named port wiring.
+    return e
   })
 
   return { graph: { nodes, edges }, fixes }

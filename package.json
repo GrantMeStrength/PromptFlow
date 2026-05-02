@@ -12,6 +12,8 @@
     "build:main": "tsc -p tsconfig.main.json",
     "start": "npm run build && NODE_ENV=production ./node_modules/.bin/electron .",
     "test:pipelines": "npm run build:main && node --experimental-vm-modules scripts/test-pipelines.mjs",
+    "test:executor": "npm run build:main && node --experimental-vm-modules scripts/test-executor.mjs",
+    "test:wizard": "npm run build:main && node --experimental-vm-modules scripts/test-wizard.mjs",
     "electron": "NODE_ENV=production ./node_modules/.bin/electron ."
   },
   "keywords": [],

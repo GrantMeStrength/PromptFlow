@@ -14,6 +14,7 @@ import { barChartProject } from '../../demo/barChart'
 import { reportGeneratorDemo } from '../../demo/reportGenerator'
 import { adventureGameProject } from '../../demo/adventureGame'
 import { documentChunkerDemo } from '../../demo/documentChunker'
+import { iqChartProject } from '../../demo/iqChart'
 import type { FlowProject } from '../../types'
 
 const EXAMPLES: { label: string; description: string; project: FlowProject }[] = [
@@ -56,6 +57,11 @@ const EXAMPLES: { label: string; description: string; project: FlowProject }[] =
     label: 'Adventure Game',
     description: 'Decision routing: type a location to explore',
     project: adventureGameProject,
+  },
+  {
+    label: 'IQ Comparison Chart',
+    description: 'Upload doc → LLM estimates IQ → HTML bar chart vs fictional leaders',
+    project: iqChartProject,
   },
   {
     label: 'Long Document Summariser',
