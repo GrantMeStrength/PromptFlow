@@ -24,8 +24,10 @@ interface FlowState {
   pendingUiRun: boolean
   /** UI nodes info in the current pending run (in topo order) */
   uiNodesInfo: Array<{ nodeId: string; data: NodeData }>
-  /** ID of the node currently executing (for highlight), null when idle */
+  /** ID of the node currently executing (for active pulse), null when idle */
   runningNodeId: string | null
+  /** IDs of all nodes that have executed in the current run (persists until next run starts) */
+  executedNodeIds: Set<string>
   // Node / Edge mutations
   onNodesChange: (changes: NodeChange[]) => void
   onEdgesChange: (changes: EdgeChange[]) => void
@@ -240,6 +242,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   pendingUiRun: false,
   uiNodesInfo: [],
   runningNodeId: null,
+  executedNodeIds: new Set<string>(),
 
   onNodesChange: (changes) =>
     set((s) => ({ nodes: applyNodeChanges(changes, s.nodes) as FlowNode[] })),
@@ -333,11 +336,11 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       nodes: [],
       edges: [],
     }
-    set({ project, nodes: [], edges: [], selectedNodeId: null, runOutput: '', isDirty: false, projectPath: null })
+    set({ project, nodes: [], edges: [], selectedNodeId: null, runOutput: '', runningNodeId: null, executedNodeIds: new Set<string>(), isDirty: false, projectPath: null })
   },
 
   loadProject: (project, savedPath?) =>
-    set({ project, nodes: project.nodes, edges: project.edges, selectedNodeId: null, runOutput: '', isDirty: false, projectPath: savedPath ?? null }),
+    set({ project, nodes: project.nodes, edges: project.edges, selectedNodeId: null, runOutput: '', runningNodeId: null, executedNodeIds: new Set<string>(), isDirty: false, projectPath: savedPath ?? null }),
 
   getProject: () => {
     const { project, nodes, edges } = get()
@@ -404,14 +407,18 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       ? `⚠ ${isolated.length} unconnected node${isolated.length !== 1 ? 's' : ''} will be skipped: ${isolated.map((n) => n.data.label).join(', ')}\n\n`
       : ''
 
-    set({ isRunning: true, runningNodeId: null, runOutput: warningPrefix + '▶ Running pipeline...\n', showOutput: true })
+    set({ isRunning: true, runningNodeId: null, executedNodeIds: new Set<string>(), runOutput: warningPrefix + '▶ Running pipeline...\n', showOutput: true })
 
     // Subscribe to node-running events for visual highlighting
     const api = window.electronAPI
     let unsubNodeRunning: (() => void) | undefined
     if (api?.onNodeRunning) {
       unsubNodeRunning = api.onNodeRunning((nodeId) => {
-        set({ runningNodeId: nodeId })
+        if (nodeId) {
+          set((s) => ({ runningNodeId: nodeId, executedNodeIds: new Set([...s.executedNodeIds, nodeId]) }))
+        } else {
+          set({ runningNodeId: null })
+        }
       })
     }
 
@@ -423,7 +430,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
         if (!res.success) {
           if (res.error === '__RUN_CANCELLED__') {
             unsubNodeRunning?.()
-            set({ isRunning: false, runningNodeId: null })
+            set({ isRunning: false, runningNodeId: null, executedNodeIds: new Set<string>() })
             set((s) => ({ runOutput: s.runOutput + '\n⏹ Run cancelled' }))
             return
           }

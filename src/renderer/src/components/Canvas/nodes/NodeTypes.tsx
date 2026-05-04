@@ -79,9 +79,10 @@ const kindMeta: Record<string, { bg: string; border: string; icon: React.ReactNo
 interface BaseNodeProps extends NodeProps<NodeData> {}
 
 const BaseNode = memo(({ id, data, selected }: BaseNodeProps) => {
-  const { selectNode, runningNodeId } = useFlowStore()
+  const { selectNode, runningNodeId, executedNodeIds } = useFlowStore()
   const meta = kindMeta[data.kind] ?? kindMeta.function
   const isRunning = runningNodeId === id
+  const hasExecuted = executedNodeIds.has(id)
 
   return (
     <div
@@ -91,7 +92,8 @@ const BaseNode = memo(({ id, data, selected }: BaseNodeProps) => {
         shadow-lg cursor-pointer transition-all duration-150
         ${selected ? 'ring-2 ring-indigo-400 ring-offset-1 ring-offset-transparent' : ''}
         ${data.hasError ? 'border-red-400 ring-2 ring-red-400' : ''}
-        ${isRunning ? 'ring-2 ring-yellow-400 ring-offset-1 ring-offset-transparent shadow-yellow-400/40 shadow-xl' : ''}
+        ${isRunning ? 'ring-2 ring-amber-300 ring-offset-1 ring-offset-transparent shadow-amber-300/50 shadow-xl animate-pulse' : ''}
+        ${hasExecuted && !isRunning ? 'ring-2 ring-yellow-500/70 ring-offset-1 ring-offset-transparent' : ''}
       `}
     >
       {/* Input handles */}
@@ -203,7 +205,9 @@ PipeNode.displayName = 'PipeNode'
 // Represents a user interaction point: text input, file upload, or multiple choice
 
 export const UINode = memo(({ id, data, selected }: NodeProps<NodeData>) => {
-  const { selectNode } = useFlowStore()
+  const { selectNode, runningNodeId, executedNodeIds } = useFlowStore()
+  const isRunning = runningNodeId === id
+  const hasExecuted = executedNodeIds.has(id)
 
   const uiIcon =
     data.uiKind === 'file' ? <FileText size={14} /> :
@@ -222,6 +226,8 @@ export const UINode = memo(({ id, data, selected }: NodeProps<NodeData>) => {
         min-w-[160px] max-w-[200px] rounded-xl border-2 border-fuchsia-500
         bg-fuchsia-900/80 shadow-lg cursor-pointer transition-all duration-150
         ${selected ? 'ring-2 ring-fuchsia-400 ring-offset-1 ring-offset-transparent' : ''}
+        ${isRunning ? 'ring-2 ring-amber-300 ring-offset-1 ring-offset-transparent shadow-amber-300/50 shadow-xl animate-pulse' : ''}
+        ${hasExecuted && !isRunning ? 'ring-2 ring-yellow-500/70 ring-offset-1 ring-offset-transparent' : ''}
       `}
     >
       {/* Single input handle (optional — ui nodes are usually sources) */}
@@ -279,8 +285,10 @@ UINode.displayName = 'UINode'
 // Compact node representing an external MCP tool provider
 
 export const MCPNode = memo(({ id, data, selected }: NodeProps<NodeData>) => {
-  const { selectNode } = useFlowStore()
+  const { selectNode, runningNodeId, executedNodeIds } = useFlowStore()
   const toolCount = data.mcpTools?.length ?? 0
+  const isRunning = runningNodeId === id
+  const hasExecuted = executedNodeIds.has(id)
 
   return (
     <div
@@ -289,6 +297,8 @@ export const MCPNode = memo(({ id, data, selected }: NodeProps<NodeData>) => {
         min-w-[150px] max-w-[190px] rounded-xl border-2 border-teal-500
         bg-teal-900/80 shadow-lg cursor-pointer transition-all duration-150
         ${selected ? 'ring-2 ring-teal-400 ring-offset-1 ring-offset-transparent' : ''}
+        ${isRunning ? 'ring-2 ring-amber-300 ring-offset-1 ring-offset-transparent shadow-amber-300/50 shadow-xl animate-pulse' : ''}
+        ${hasExecuted && !isRunning ? 'ring-2 ring-yellow-500/70 ring-offset-1 ring-offset-transparent' : ''}
       `}
     >
       {/* Header */}
@@ -329,8 +339,10 @@ MCPNode.displayName = 'MCPNode'
 // Extends BaseNode with a special teal tools input handle at the bottom
 
 export const LLMNode = memo(({ id, data, selected }: NodeProps<NodeData>) => {
-  const { selectNode } = useFlowStore()
+  const { selectNode, runningNodeId, executedNodeIds } = useFlowStore()
   const meta = kindMeta.llm
+  const isRunning = runningNodeId === id
+  const hasExecuted = executedNodeIds.has(id)
 
   return (
     <div
@@ -340,6 +352,8 @@ export const LLMNode = memo(({ id, data, selected }: NodeProps<NodeData>) => {
         shadow-lg cursor-pointer transition-all duration-150
         ${selected ? 'ring-2 ring-indigo-400 ring-offset-1 ring-offset-transparent' : ''}
         ${data.hasError ? 'border-red-400 ring-2 ring-red-400' : ''}
+        ${isRunning ? 'ring-2 ring-amber-300 ring-offset-1 ring-offset-transparent shadow-amber-300/50 shadow-xl animate-pulse' : ''}
+        ${hasExecuted && !isRunning ? 'ring-2 ring-yellow-500/70 ring-offset-1 ring-offset-transparent' : ''}
       `}
     >
       {/* Data input handles */}
@@ -433,7 +447,9 @@ ChunkerNode.displayName = 'ChunkerNode'
 // Source-only node that injects a system prompt into connected LLM/Judge nodes
 
 export const SystemPromptNode = memo(({ id, data, selected }: NodeProps<NodeData>) => {
-  const { selectNode } = useFlowStore()
+  const { selectNode, runningNodeId, executedNodeIds } = useFlowStore()
+  const isRunning = runningNodeId === id
+  const hasExecuted = executedNodeIds.has(id)
   return (
     <div
       onClick={() => selectNode(id)}
@@ -442,6 +458,8 @@ export const SystemPromptNode = memo(({ id, data, selected }: NodeProps<NodeData
         shadow-lg cursor-pointer transition-all duration-150
         ${selected ? 'ring-2 ring-teal-400 ring-offset-1 ring-offset-transparent' : ''}
         ${data.hasError ? 'border-red-400 ring-2 ring-red-400' : ''}
+        ${isRunning ? 'ring-2 ring-amber-300 ring-offset-1 ring-offset-transparent shadow-amber-300/50 shadow-xl animate-pulse' : ''}
+        ${hasExecuted && !isRunning ? 'ring-2 ring-yellow-500/70 ring-offset-1 ring-offset-transparent' : ''}
       `}
     >
       {/* Header */}
@@ -476,7 +494,9 @@ SystemPromptNode.displayName = 'SystemPromptNode'
 // ─── State Variable node ──────────────────────────────────────────────────────
 
 export const StateNode = memo(({ id, data, selected }: NodeProps<NodeData>) => {
-  const { selectNode } = useFlowStore()
+  const { selectNode, runningNodeId, executedNodeIds } = useFlowStore()
+  const isRunning = runningNodeId === id
+  const hasExecuted = executedNodeIds.has(id)
   const isWrite = data.stateMode === 'write'
   return (
     <div
@@ -486,6 +506,8 @@ export const StateNode = memo(({ id, data, selected }: NodeProps<NodeData>) => {
         shadow-lg cursor-pointer transition-all duration-150
         ${selected ? 'ring-2 ring-indigo-400 ring-offset-1 ring-offset-transparent' : ''}
         ${data.hasError ? 'border-red-400 ring-2 ring-red-400' : ''}
+        ${isRunning ? 'ring-2 ring-amber-300 ring-offset-1 ring-offset-transparent shadow-amber-300/50 shadow-xl animate-pulse' : ''}
+        ${hasExecuted && !isRunning ? 'ring-2 ring-yellow-500/70 ring-offset-1 ring-offset-transparent' : ''}
       `}
     >
       {/* Write-mode input handle */}
