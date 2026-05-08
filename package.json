@@ -6,15 +6,15 @@
   "scripts": {
     "dev": "concurrently -k \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "vite --config vite.renderer.config.ts",
-    "dev:electron": "wait-on http://localhost:5173 && tsc -p tsconfig.main.json && ./node_modules/.bin/electron dist/main/index.js",
+    "dev:electron": "wait-on http://localhost:5173 && tsc -p tsconfig.main.json && electron dist/main/index.js",
     "build": "npm run build:renderer && npm run build:main",
     "build:renderer": "vite build --config vite.renderer.config.ts",
     "build:main": "tsc -p tsconfig.main.json",
-    "start": "npm run build && NODE_ENV=production ./node_modules/.bin/electron .",
+    "start": "npm run build && cross-env NODE_ENV=production electron .",
     "test:pipelines": "npm run build:main && node --experimental-vm-modules scripts/test-pipelines.mjs",
     "test:executor": "npm run build:main && node --experimental-vm-modules scripts/test-executor.mjs",
     "test:wizard": "npm run build:main && node --experimental-vm-modules scripts/test-wizard.mjs",
-    "electron": "NODE_ENV=production ./node_modules/.bin/electron ."
+    "electron": "cross-env NODE_ENV=production electron ."
   },
   "keywords": [],
   "author": "",
@@ -26,6 +26,7 @@
     "@vitejs/plugin-react": "^6.0.1",
     "autoprefixer": "^10.5.0",
     "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
     "electron": "^41.3.0",
     "electron-builder": "^26.8.1",
     "postcss": "^8.5.12",
