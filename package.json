@@ -10,11 +10,11 @@
     "build": "npm run build:renderer && npm run build:main",
     "build:renderer": "vite build --config vite.renderer.config.ts",
     "build:main": "tsc -p tsconfig.main.json",
-    "start": "npm run build && cross-env NODE_ENV=production electron .",
+    "start": "npm run build && npx cross-env NODE_ENV=production electron .",
     "test:pipelines": "npm run build:main && node --experimental-vm-modules scripts/test-pipelines.mjs",
     "test:executor": "npm run build:main && node --experimental-vm-modules scripts/test-executor.mjs",
     "test:wizard": "npm run build:main && node --experimental-vm-modules scripts/test-wizard.mjs",
-    "electron": "cross-env NODE_ENV=production electron ."
+    "electron": "npx cross-env NODE_ENV=production electron ."
   },
   "keywords": [],
   "author": "",
