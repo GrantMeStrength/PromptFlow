@@ -370,6 +370,26 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   runPipeline: async () => {
     const { nodes, edges } = get()
 
+    // Warn early if LLM-dependent nodes are present but no API key is configured
+    const llmKinds = new Set(['llm', 'judge', 'chunker'])
+    const needsKey = nodes.some((n) => llmKinds.has(n.data.kind))
+    if (needsKey && window.electronAPI) {
+      try {
+        const settings = await window.electronAPI.getSettings()
+        const hasKey = !!(settings?.apiKey || settings?.anthropicApiKey)
+        const hasOllama = nodes.some((n) => llmKinds.has(n.data.kind) && String(n.data.llmModel ?? '').startsWith('ollama/'))
+        if (!hasKey && !hasOllama) {
+          set({
+            showOutput: true,
+            runOutput: '⚠️ No API key configured\n\nThis workflow contains LLM nodes that require an API key.\nOpen ⚙ Settings and add your OpenAI (or Anthropic) API key, then run again.',
+          })
+          return
+        }
+      } catch {
+        // If we can't check, let the run proceed and surface the error naturally
+      }
+    }
+
     // Check for UI interaction nodes — collect inputs first
     const uiNodes = nodes.filter((n) => n.data.kind === 'ui')
     if (uiNodes.length > 0) {
@@ -496,10 +516,15 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       }
     } catch (err) {
       unsubNodeRunning?.()
+      const msg = (err as Error).message ?? String(err)
+      const isKeyError = /api key|no api key|unauthorized|401/i.test(msg)
+      const display = isKeyError
+        ? `\n⚠️ API Key Error: ${msg}\n\nOpen ⚙ Settings to add or update your API key.`
+        : `\n❌ Error: ${msg}`
       set((s) => ({
         isRunning: false,
         runningNodeId: null,
-        runOutput: s.runOutput + `\n❌ Error: ${(err as Error).message}`,
+        runOutput: s.runOutput + display,
       }))
     }
   },
