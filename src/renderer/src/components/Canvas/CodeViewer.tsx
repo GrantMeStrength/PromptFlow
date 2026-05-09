@@ -1,6 +1,5 @@
-import React from 'react'
-import Editor from '@monaco-editor/react'
-import { X } from 'lucide-react'
+import React, { useState } from 'react'
+import { X, Copy, Check } from 'lucide-react'
 import { useFlowStore } from '../../store/flowStore'
 
 interface CodeViewerProps {
@@ -10,34 +9,38 @@ interface CodeViewerProps {
 export function CodeViewer({ onClose }: CodeViewerProps) {
   const { getGeneratedCode } = useFlowStore()
   const code = getGeneratedCode()
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
 
   return (
-    <div className="h-60 bg-[#0d0d1a] border-t border-[#2a2a3f] flex flex-col">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[#2a2a3f]">
+    <div className="h-64 bg-[#080810] border-t border-[#2a2a3f] flex flex-col">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-[#2a2a3f] shrink-0">
         <span className="text-[11px] uppercase tracking-widest text-slate-500">
           Generated JavaScript
         </span>
-        <button onClick={onClose} className="text-slate-500 hover:text-white">
-          <X size={14} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleCopy}
+            className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white transition-colors"
+            title="Copy to clipboard"
+          >
+            {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+            {copied ? 'Copied!' : 'Copy'}
+          </button>
+          <button onClick={onClose} className="text-slate-500 hover:text-white ml-2">
+            <X size={14} />
+          </button>
+        </div>
       </div>
-      <div className="flex-1 overflow-hidden">
-        <Editor
-          height="100%"
-          defaultLanguage="javascript"
-          value={code}
-          theme="vs-dark"
-          options={{
-            readOnly: true,
-            minimap: { enabled: false },
-            fontSize: 11,
-            lineNumbers: 'on',
-            scrollBeyondLastLine: false,
-            wordWrap: 'on',
-            padding: { top: 8, bottom: 8 },
-          }}
-        />
-      </div>
+      <pre className="flex-1 overflow-auto p-3 text-[11px] font-mono text-slate-300 leading-relaxed whitespace-pre">
+        {code}
+      </pre>
     </div>
   )
 }
