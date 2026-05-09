@@ -29,9 +29,12 @@ function validateGraph(obj) {
     if (typeof n.id !== 'string' || !n.id) return { ok: false, error: 'A node is missing a valid id.' }
     const data = n.data
     if (!data) return { ok: false, error: `Node "${n.id}" has no data field.` }
-    if (!VALID_KINDS.includes(data.kind)) {
-      return { ok: false, error: `Unknown node type "${data.kind}" on node "${n.id}".` }
+    // Fall back to node.type if data.kind is missing (common LLM hallucination)
+    const resolvedKind = data.kind ?? n.type
+    if (!VALID_KINDS.includes(resolvedKind)) {
+      return { ok: false, error: `Unknown node type "${resolvedKind}" on node "${n.id}".` }
     }
+    data.kind = resolvedKind  // normalise
     nodeIds.add(n.id)
   }
   for (const e of g.edges) {
@@ -722,6 +725,37 @@ This workflow will accept English text and return the Spanish translation.
     }
   },
 
+  // ── Test 10: node.type set but data.kind missing (common LLM hallucination) ──
+  {
+    description: 'node.type fallback when data.kind is absent',
+    json: `\`\`\`json
+{
+  "nodes": [
+    { "id": "n1", "type": "ui", "position": {"x":100,"y":100}, "data": { "label": "Input", "uiKind": "text" } },
+    { "id": "n2", "type": "function", "position": {"x":400,"y":100}, "data": { "label": "Count", "code": "return { count: (inputs.value||'').split(/\\\\s+/).filter(Boolean).length }" } },
+    { "id": "n3", "type": "output", "position": {"x":700,"y":100}, "data": { "label": "Result" } }
+  ],
+  "edges": [
+    { "id": "e1", "source": "n1", "target": "n2" },
+    { "id": "e2", "source": "n2", "target": "n3" }
+  ]
+}
+\`\`\``,
+    validate(graph) {
+      // All nodes should have data.kind resolved from node.type
+      const kinds = graph.nodes.map(n => n.data.kind)
+      if (!kinds.includes('ui')) throw new Error(`Expected ui kind, got: ${kinds}`)
+      if (!kinds.includes('function')) throw new Error(`Expected function kind, got: ${kinds}`)
+      if (!kinds.includes('output')) throw new Error(`Expected output kind, got: ${kinds}`)
+      // node.type should also be set
+      const types = graph.nodes.map(n => n.type)
+      if (!types.every(t => t)) throw new Error(`Some nodes missing type: ${types}`)
+    },
+    expect(result) {
+      // Execution test not needed here — structural test only
+    }
+  },
+
 ]
 
 const PASS  = '\x1b[32m✓\x1b[0m'
@@ -736,10 +770,10 @@ let failed = 0
 console.log('\n\x1b[1mPromptFlow Wizard Integration Tests\x1b[0m\n')
 
 for (const test of WIZARD_TESTS) {
-  const label = `[${test.prompt.slice(0, 60)}]`
+  const label = `[${(test.description ?? test.prompt ?? '').slice(0, 60)}]`
   try {
-    // Step 1: parse wizard LLM response
-    const extracted = extractGraph(test.wizardResponse)
+    // Step 1: parse wizard LLM response (or use inline json field for unit tests)
+    const extracted = extractGraph(test.json ?? test.wizardResponse)
     if (!extracted) throw new Error('extractGraph returned null — no JSON block found in response')
     if (!extracted.ok) throw new Error(`extractGraph failed: ${extracted.error}`)
 
@@ -750,7 +784,8 @@ for (const test of WIZARD_TESTS) {
     }
 
     // Step 3: check sanitize expectations if defined
-    if (test.checkSanitize) test.checkSanitize(fixes)
+    if (test.checkSanitize) test.checkSanitize(fixes, graph)
+    if (test.validate) test.validate(graph)
 
     // Step 4: run pipeline
     const ctx = buildCtx(test.uiInputs ?? {})

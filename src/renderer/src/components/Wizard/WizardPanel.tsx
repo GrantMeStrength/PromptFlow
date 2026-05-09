@@ -312,9 +312,13 @@ function validateGraph(obj: unknown): { ok: true; graph: { nodes: FlowNode[]; ed
     if (typeof node.id !== 'string' || !node.id) return { ok: false, error: 'A node is missing a valid id.' }
     const data = node.data as Record<string, unknown> | undefined
     if (!data) return { ok: false, error: `Node "${node.id}" has no data field.` }
-    if (!VALID_KINDS.includes(data.kind as NodeKind)) {
-      return { ok: false, error: `Unknown node type "${data.kind}" on node "${node.id}". Valid types: ${VALID_KINDS.join(', ')}.` }
+    // LLM often sets node.type correctly but omits data.kind — treat them as equivalent
+    const resolvedKind = (data.kind ?? node.type) as NodeKind
+    if (!VALID_KINDS.includes(resolvedKind)) {
+      return { ok: false, error: `Unknown node type "${resolvedKind}" on node "${node.id}". Valid types: ${VALID_KINDS.join(', ')}.` }
     }
+    // Normalise: ensure data.kind is always set
+    data.kind = resolvedKind
     nodeIds.add(node.id)
   }
   for (const e of g.edges as unknown[]) {
@@ -411,6 +415,11 @@ function sanitizeGraph(graph: { nodes: FlowNode[]; edges: FlowEdge[] }): {
   const nodes = graph.nodes.map((n) => {
     let data = { ...n.data }
 
+    // Sync node.type → data.kind if the LLM set type but not kind (validateGraph already normalised data.kind)
+    const syncedType = data.kind ?? n.type as string
+    const finalNode = { ...n, type: syncedType, data: { ...data, kind: syncedType } }
+    data = finalNode.data
+
     // Fix LLM nodes: replace {{inputs.xxx}} or {{inputs.xxx.yyy}} placeholders with {{text}}
     if (data.kind === 'llm' && data.llmPromptTemplate) {
       const fixed = data.llmPromptTemplate.replace(/\{\{inputs\.[^}]+\}\}/g, (_m) => {
@@ -442,7 +451,7 @@ function sanitizeGraph(graph: { nodes: FlowNode[]; edges: FlowEdge[] }): {
       data = { ...data, code: '' }
     }
 
-    return data === n.data ? n : { ...n, data }
+    return { ...finalNode, data }
   })
 
   const edges = graph.edges.map((e) => {
