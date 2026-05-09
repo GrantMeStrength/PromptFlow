@@ -1,4 +1,5 @@
 import React from 'react'
+import { ReactFlowProvider } from 'reactflow'
 import { Toolbar } from './components/Toolbar/Toolbar'
 import { NodePalette } from './components/Palette/NodePalette'
 import { FlowCanvas } from './components/Canvas/FlowCanvas'
@@ -37,7 +38,7 @@ export default function App() {
 
         {/* Canvas + bottom panels */}
         <div className="flex flex-col flex-1 overflow-hidden">
-          <FlowCanvas />
+          <ReactFlowProvider><FlowCanvas /></ReactFlowProvider>
           {showCode && <CodeViewer onClose={() => setShowCode(false)} />}
           {showOutput && <OutputPanel onClose={toggleOutput} />}
         </div>

@@ -704,8 +704,10 @@ export function NodePalette() {
           {paletteItems.map((item) => (
             <button
               key={item.kind}
+              draggable
+              onDragStart={(e) => e.dataTransfer.setData('application/promptflow', JSON.stringify({ kind: item.kind }))}
               onClick={() => handleAdd(item.kind)}
-              className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all duration-150 cursor-pointer ${item.bg}`}
+              className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all duration-150 cursor-grab active:cursor-grabbing ${item.bg}`}
             >
               <span className={`${item.color} shrink-0 mt-0.5`}>{item.icon}</span>
               <div className="min-w-0">
@@ -722,8 +724,10 @@ export function NodePalette() {
           {interactionItems.map((item) => (
             <button
               key={item.uiKind}
+              draggable
+              onDragStart={(e) => e.dataTransfer.setData('application/promptflow', JSON.stringify({ kind: 'ui', uiKind: item.uiKind, label: item.label, uiLabel: item.defaultLabel, uiOptions: item.defaultOptions }))}
               onClick={() => handleAddInteraction(item)}
-              className="flex items-start gap-3 p-3 rounded-xl border text-left transition-all duration-150 cursor-pointer bg-fuchsia-900/30 border-fuchsia-700/50 hover:border-fuchsia-500"
+              className="flex items-start gap-3 p-3 rounded-xl border text-left transition-all duration-150 cursor-grab active:cursor-grabbing bg-fuchsia-900/30 border-fuchsia-700/50 hover:border-fuchsia-500"
             >
               <span className="text-fuchsia-400 shrink-0 mt-0.5">{item.icon}</span>
               <div className="min-w-0">
@@ -776,7 +780,7 @@ export function NodePalette() {
           )}
 
           <div className="px-1 pt-2 text-[10px] text-slate-600 leading-relaxed">
-            Click to add a blank node, then connect ports by dragging.
+            Click or drag nodes onto the canvas, then connect ports by dragging.
           </div>
         </div>
       )}
@@ -803,8 +807,10 @@ export function NodePalette() {
                     {items.map((item) => (
                       <button
                         key={item.label}
+                        draggable
+                        onDragStart={(e) => e.dataTransfer.setData('application/promptflow', JSON.stringify({ kind: item.kind, label: item.label, description: item.description, ...item.data }))}
                         onClick={() => handleAddLibrary(item)}
-                        className="flex items-start gap-2 px-3 py-2 bg-[#13131f] hover:bg-[#1a1a2e] transition-colors text-left group"
+                        className="flex items-start gap-2 px-3 py-2 bg-[#13131f] hover:bg-[#1a1a2e] transition-colors text-left group cursor-grab active:cursor-grabbing"
                       >
                         <span className={`${item.color} shrink-0 mt-0.5 text-[10px]`}>▶</span>
                         <div className="min-w-0">

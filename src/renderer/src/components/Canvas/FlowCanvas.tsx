@@ -4,6 +4,7 @@ import ReactFlow, {
   Controls,
   MiniMap,
   BackgroundVariant,
+  useReactFlow,
   type NodeTypes,
   type EdgeTypes,
 } from 'reactflow'
@@ -56,13 +57,41 @@ const minimapNodeColor = (node: { type?: string }) => {
 }
 
 export function FlowCanvas() {
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, selectNode } =
+  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, selectNode, addNode, updateNodeData } =
     useFlowStore()
+  const { screenToFlowPosition } = useReactFlow()
 
   const handlePaneClick = useCallback(() => selectNode(null), [selectNode])
 
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes('application/promptflow')) {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'copy'
+    }
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    const raw = e.dataTransfer.getData('application/promptflow')
+    if (!raw) return
+    try {
+      const payload = JSON.parse(raw)
+      const { kind, label, description, uiKind, uiLabel, uiOptions, ...extra } = payload
+      const position = screenToFlowPosition({ x: e.clientX, y: e.clientY })
+      const node = addNode(kind, position, { label, description, uiKind, uiLabel, uiOptions })
+      if (Object.keys(extra).length > 0) updateNodeData(node.id, extra)
+      selectNode(node.id)
+    } catch {
+      // ignore malformed drag data
+    }
+  }, [screenToFlowPosition, addNode, updateNodeData, selectNode])
+
   return (
-    <div className="flex-1 h-full bg-[#0f0f1a] canvas-texture relative">
+    <div
+        className="flex-1 h-full bg-[#0f0f1a] canvas-texture relative"
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
       {nodes.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
           <div className="text-center select-none">
