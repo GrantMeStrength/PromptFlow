@@ -14,6 +14,7 @@
     "test:pipelines": "npm run build:main && node --experimental-vm-modules scripts/test-pipelines.mjs",
     "test:executor": "npm run build:main && node --experimental-vm-modules scripts/test-executor.mjs",
     "test:wizard": "npm run build:main && node --experimental-vm-modules scripts/test-wizard.mjs",
+    "test:e2e": "npm run build:main && node --experimental-vm-modules scripts/test-e2e.mjs",
     "electron": "npx cross-env NODE_ENV=production electron ."
   },
   "keywords": [],
