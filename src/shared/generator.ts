@@ -612,7 +612,7 @@ export function generateCode(nodes: FlowNode[], edges: FlowEdge[]): string {
   return lines.join('\n')
 }
 
-function nodeToFnName(id: string, label: string): string {
-  const clean = label.replace(/[^a-zA-Z0-9]/g, '_').replace(/^_+|_+$/g, '')
+function nodeToFnName(id: string, label: string | undefined): string {
+  const clean = (label ?? 'node').replace(/[^a-zA-Z0-9]/g, '_').replace(/^_+|_+$/g, '')
   return `${clean}_${id.replace(/-/g, '_')}`
 }
