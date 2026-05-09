@@ -8,7 +8,8 @@ interface CodeViewerProps {
 
 export function CodeViewer({ onClose }: CodeViewerProps) {
   const { getGeneratedCode } = useFlowStore()
-  const code = getGeneratedCode()
+  let code = ''
+  try { code = getGeneratedCode() } catch (e) { code = `// Error generating code: ${e}` }
   const [copied, setCopied] = useState(false)
 
   const handleCopy = () => {

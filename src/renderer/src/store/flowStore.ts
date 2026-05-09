@@ -251,48 +251,17 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     set((s) => ({ edges: applyEdgeChanges(changes, s.edges) as FlowEdge[] })),
 
   onConnect: (connection) => {
-    const { nodes } = get()
-    const sourceNode = nodes.find((n) => n.id === connection.source)
-    const targetNode = nodes.find((n) => n.id === connection.target)
-
-    if (!sourceNode || !targetNode) return
-
-    // Place pipe node at the midpoint between source and target
-    const midX = (sourceNode.position.x + targetNode.position.x) / 2 + 80
-    const midY = (sourceNode.position.y + targetNode.position.y) / 2 + 20
-
-    const pipeId = `pipe-${++nodeCounter}`
-    const pipeData: NodeData = {
-      ...defaultNodeData('pipe'),
-      label: 'Mapping',
-      pipeSourceId: sourceNode.id,
-      pipeTargetId: targetNode.id,
-    }
-    const pipeNode: FlowNode = { id: pipeId, type: 'pipe', position: { x: midX, y: midY }, data: pipeData }
-
-    const edgeStyle = { type: 'gradient', animated: true, style: { strokeWidth: 1.5, strokeDasharray: '4 3' } }
-    const edgeIn: FlowEdge = {
-      id: `e-${connection.source}-${pipeId}`,
-      source: connection.source,
+    const edgeStyle = { type: 'gradient', animated: true, style: { strokeWidth: 2 } }
+    const edge: FlowEdge = {
+      id: `e-${connection.source}-${connection.target}`,
+      source: connection.source!,
       sourceHandle: connection.sourceHandle ?? undefined,
-      target: pipeId,
-      targetHandle: 'value',
-      ...edgeStyle,
-    }
-    const edgeOut: FlowEdge = {
-      id: `e-${pipeId}-${connection.target}`,
-      source: pipeId,
-      sourceHandle: 'value',
-      target: connection.target,
+      target: connection.target!,
       targetHandle: connection.targetHandle ?? undefined,
       ...edgeStyle,
     }
-
     set((s) => ({
-      nodes: [...s.nodes, pipeNode],
-      edges: [...s.edges, edgeIn, edgeOut],
-      selectedNodeId: pipeId,
-      pendingPipeNodeId: pipeId,
+      edges: [...s.edges, edge],
       isDirty: true,
     }))
   },

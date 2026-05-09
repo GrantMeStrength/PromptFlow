@@ -149,10 +149,10 @@ export function Toolbar({ showOutput, onToggleOutput, showCode, onToggleCode, on
   }
 
   const handleViewCode = () => {
-    if (!showCode) {
-      console.log('=== Generated Code ===\n', getGeneratedCode())
-    }
     onToggleCode()
+    if (!showCode) {
+      try { console.log('=== Generated Code ===\n', getGeneratedCode()) } catch { /* ignore */ }
+    }
   }
 
   return (
