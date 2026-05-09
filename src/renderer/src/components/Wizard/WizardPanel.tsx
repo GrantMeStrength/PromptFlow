@@ -349,16 +349,28 @@ function extractGraph(text: string): { ok: true; graph: { nodes: FlowNode[]; edg
 /**
  * Escape literal control characters (newlines, tabs, etc.) that appear inside
  * JSON string values. LLMs sometimes emit unescaped newlines in code fields,
- * which JSON.parse rejects as "Bad control character in string literal".
+/**
+ * Repairs common LLM JSON encoding mistakes inside string values:
+ * 1. Literal control characters (newlines, tabs, etc.) → proper escape sequences
+ * 2. Invalid backslash escapes (e.g. \s, \w, \d in regexes) → \\s, \\w, \\d
+ *    JSON only allows: \" \\ \/ \b \f \n \r \t \uXXXX
  */
 function repairJsonControlChars(json: string): string {
+  // Valid single-char JSON escape sequences (after the backslash)
+  const VALID_ESCAPES = new Set(['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'])
+
   let out = ''
   let inString = false
   let escaped = false
   for (let i = 0; i < json.length; i++) {
     const ch = json[i]
     if (escaped) {
-      out += ch
+      // If the escape sequence is invalid, double the backslash
+      if (inString && !VALID_ESCAPES.has(ch)) {
+        out += '\\' + ch  // e.g. \s → \\s
+      } else {
+        out += ch
+      }
       escaped = false
       continue
     }

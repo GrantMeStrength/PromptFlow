@@ -48,12 +48,21 @@ function validateGraph(obj) {
 }
 
 function repairJsonControlChars(json) {
+  const VALID_ESCAPES = new Set(['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'])
   let out = ''
   let inString = false
   let escaped = false
   for (let i = 0; i < json.length; i++) {
     const ch = json[i]
-    if (escaped) { out += ch; escaped = false; continue }
+    if (escaped) {
+      if (inString && !VALID_ESCAPES.has(ch)) {
+        out += '\\' + ch  // e.g. \s → \\s
+      } else {
+        out += ch
+      }
+      escaped = false
+      continue
+    }
     if (ch === '\\' && inString) { out += ch; escaped = true; continue }
     if (ch === '"') { inString = !inString; out += ch; continue }
     if (inString) {
@@ -753,6 +762,36 @@ This workflow will accept English text and return the Spanish translation.
     },
     expect(result) {
       // Execution test not needed here — structural test only
+    }
+  },
+
+  // ── Test 11: Invalid escape sequences in regex (\s, \w, \d) ──
+  {
+    description: 'JSON repair: invalid \\s escape in regex inside code field',
+    // LLM writes \s+ without doubling the backslash — JSON.parse rejects "Bad escaped character"
+    // We build the response string manually to embed a literal \s (single backslash + s)
+    wizardResponse: '```json\n' +
+      '{\n' +
+      '  "nodes": [\n' +
+      '    { "id": "ui1", "type": "ui", "position": { "x": 100, "y": 100 },\n' +
+      '      "data": { "label": "Input", "kind": "ui", "uiKind": "text" } },\n' +
+      '    { "id": "fn1", "type": "function", "position": { "x": 400, "y": 100 },\n' +
+      '      "data": { "label": "Count", "kind": "function",\n' +
+      '        "code": "return { count: inputs.value.trim().split(/\\s+/).filter(Boolean).length };" } },\n' +
+      '    { "id": "out1", "type": "output", "position": { "x": 700, "y": 100 },\n' +
+      '      "data": { "label": "Result", "kind": "output" } }\n' +
+      '  ],\n' +
+      '  "edges": [\n' +
+      '    { "id": "e1", "source": "ui1", "target": "fn1" },\n' +
+      '    { "id": "e2", "source": "fn1", "target": "out1" }\n' +
+      '  ]\n' +
+      '}\n' +
+      '```\n',
+    uiInputs: { ui1: { value: 'the quick brown fox' } },
+    expect(result) {
+      if (result?.__error) throw new Error(`Pipeline errored: ${result.message}`)
+      const count = result?.count
+      if (count !== 4) throw new Error(`Expected word count 4, got ${JSON.stringify(result)}`)
     }
   },
 
